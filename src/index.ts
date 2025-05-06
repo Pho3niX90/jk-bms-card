@@ -315,7 +315,6 @@ export class JkBmsCard extends LitElement{
             }
         }
 
-        this._updateFlowLine()
         return html`${cells}`;
     }
 
