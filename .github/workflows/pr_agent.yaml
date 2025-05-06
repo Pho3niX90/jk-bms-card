@@ -1,0 +1,24 @@
+name: AI PR Agent
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, edited, synchronize]
+  issue_comment:
+    types: [created]
+jobs:
+  pr_agent_job:
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    runs-on: ubuntu-latest
+    name: Run pr agent on every pull request, respond to user comments
+    steps:
+      - name: PR Agent action step
+        id: pragent
+        uses: qodo-ai/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+          PR_DESCRIPTION.GENERATE_AI_TITLE: "true"
+          PR_DESCRIPTION.PUBLISH_LABELS: "true"
+          PR_REVIEWER.ENABLE_AUTO_APPROVAL: "true"
