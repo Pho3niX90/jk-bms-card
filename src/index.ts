@@ -118,6 +118,54 @@ export class JkBmsCard extends LitElement{
         .voltage-high { color: #3090C7; }
         .voltage-low { color: red; }
         .center { text-align: center; }
+        .pill {
+            display: inline-block;
+            padding: 0.15rem 0.25rem;
+            background-color: #195569;
+            color: #e4f3f8;
+            border-radius: 999px;
+            font-weight: 500;
+            font-family: sans-serif;
+            font-size: 0.9rem;
+            min-width: 2rem;
+            text-align: center;
+        }
+        .flow-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        line {
+            stroke: #3090C7;
+            stroke-width: 2;
+            stroke-dasharray: 6;
+            animation: dashmove 1s linear infinite;
+            filter: drop-shadow(0 0 4px #41cd52);
+        }
+        path {
+            stroke: #3090C7;
+            stroke-width: 3;
+            stroke-linecap: round;
+            fill: none;
+            stroke-dasharray: 10;
+            stroke-dashoffset: 0;
+            animation: dashmove 1.2s linear infinite;
+            filter: drop-shadow(0 0 4px #41cd52);
+         }
+
+        @keyframes dashmove {
+            from {
+                stroke-dashoffset: 0;
+            }
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
     `;
 
     private _navigate(event, entityId: string, type: "sensor" | "switch" | "number" = "sensor") {
@@ -201,12 +249,29 @@ export class JkBmsCard extends LitElement{
           </div>
         </div>
 
-        <div class="grid grid-${this._config.cellColumns ?? 2}">
+          <svg class="flow-line" id="flow-svg">
+              <path id="flow-path" fill="none" />
+          </svg>
+
+          <div class="grid grid-${this._config.cellColumns ?? 2}">
           ${this._renderCells(this._config.cellLayout == "bankMode")}
         </div>
       </ha-card>
     `;
     }
+    updated() {
+        requestAnimationFrame(() => this._updateFlowLine());
+    }
+    connectedCallback() {
+        super.connectedCallback();
+        window.addEventListener('resize', this._updateFlowLine.bind(this));
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        window.removeEventListener('resize', this._updateFlowLine.bind(this));
+    }
+
 
     private _renderError() {
         const state = this._state('errors', '', "sensor");
@@ -250,8 +315,10 @@ export class JkBmsCard extends LitElement{
             }
         }
 
+        this._updateFlowLine()
         return html`${cells}`;
     }
+
     private _createCell(i) {
         const voltage = this._state(`cell_voltage_${i}`, '0.0');
         const resistance = this._state(`cell_resistance_${i}`, '');
@@ -260,32 +327,84 @@ export class JkBmsCard extends LitElement{
 
         const color = i.toString() === minCell ? 'voltage-low'
             : i.toString() === maxCell ? 'voltage-high'
-                : '';
+            : '';
 
-        let currentHtml;
-        if (resistance != '') {
-            currentHtml = html`
-        <div class="center">
-            <span class="clickable" @click=${(e) => this._navigate(e, `cell_voltage_${i}`)}>
-                ${i.toString().padStart(2, '0')}.&nbsp;
-            ${color ? html`<span class="${color}">${voltage} V</span>` : html`${voltage} V`}
-          </span>
-          <span class="clickable" @click=${(e) => this._navigate(e, `cell_resistance_${i}`)}>
+        let resistanceHtml = resistance == '' ? '' : html`
+            <span class="clickable" @click=${(e) => this._navigate(e, `cell_resistance_${i}`)}>
             / ${resistance} Ω
-          </span>
-        </div>
-      `
-        } else {
-            currentHtml = html`
-        <div class="center">
+          </span>`
+
+        return html`
+            <div class="center cell-container" id="cell-${i}">
             <span class="clickable" @click=${(e) => this._navigate(e, `cell_voltage_${i}`)}>
-                ${i.toString().padStart(2, '0')}.&nbsp;
+                <span class="pill">${i.toString().padStart(2, '0')}</span>
             ${color ? html`<span class="${color}">${voltage} V</span>` : html`${voltage} V`}
           </span>
-        </div>
-      `
+                ${resistanceHtml}
+            </div>
+        `;
+    }
+    private _updateFlowLine() {
+        const minId = this._state('min_voltage_cell');
+        const maxId = this._state('max_voltage_cell');
+        const balanceCurrent = parseFloat(this._state('balancing_current', '0'));
+
+        const minEl = this.renderRoot.querySelector(`#cell-${minId}`);
+        const maxEl = this.renderRoot.querySelector(`#cell-${maxId}`);
+        const path = this.renderRoot.querySelector('#flow-path') as SVGPathElement;
+
+        if (!path) return;
+
+        if (balanceCurrent === 0 || !minEl || !maxEl) {
+            path.setAttribute('d', '');
+            path.style.display = 'none';
+            return;
         }
-        return currentHtml;
+
+        path.style.display = 'inline';
+
+        const hostEl = this.renderRoot instanceof ShadowRoot
+            ? this.renderRoot.host as HTMLElement
+            : this;
+
+        const cardRect = hostEl.getBoundingClientRect();
+        const minRect = minEl.getBoundingClientRect();
+        const maxRect = maxEl.getBoundingClientRect();
+
+        const getSideAnchor = (rect: DOMRect): { side: 'left' | 'right', x: number, y: number } => {
+            const centerX = rect.left + rect.width / 2;
+            const midCardX = cardRect.left + cardRect.width / 2;
+            const side = centerX < midCardX ? 'right' : 'left';
+            const x = side === 'right' ? rect.right - cardRect.left : rect.left - cardRect.left;
+            const y = rect.top + rect.height / 2 - cardRect.top;
+            return { side, x, y };
+        };
+
+        const from = getSideAnchor(maxRect);
+        const to = getSideAnchor(minRect);
+
+        const horizontalOffset = 10;
+        let d: string;
+
+        if (from.side === to.side) {
+            const elbowX = from.side === 'right'
+                ? from.x + horizontalOffset
+                : from.x - horizontalOffset;
+
+            d = `M ${from.x},${from.y}
+             L ${elbowX},${from.y}
+             L ${elbowX},${to.y}
+             L ${to.x},${to.y}`;
+        } else {
+            const midX = (from.x + to.x) / 2;
+
+            d = `M ${from.x},${from.y}
+             L ${midX},${from.y}
+             L ${midX},${to.y}
+             L ${to.x},${to.y}`;
+        }
+
+        path.setAttribute('d', d);
     }
 }
 

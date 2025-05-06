@@ -1,6 +1,9 @@
 I liked the layout of [Inspiration](https://github.com/syssi/esphome-jk-bms/discussions/230), but wanted the native functionality of clicking on an entity to see the history. So I created this simplistic card
 
-![img.png](images/img.png)
+![multiple.png](images/multiple.png)
+
+## Balancing visualization
+![balancing.gif](images/balancing.gif)
 
 inspired from: https://github.com/syssi/esphome-jk-bms/discussions/230
 integration from: https://github.com/syssi/esphome-jk-bms/tree/main
