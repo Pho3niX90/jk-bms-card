@@ -7,5 +7,5 @@ export interface JkBmsCardConfig extends LovelaceCardConfig {
     cellCount: number;
     cellColumns: number;
     cellLayout: 'incremental' | 'bankMode';
-    entities: EntityKey;
+    entities: { [key in EntityKey]: string };
 }

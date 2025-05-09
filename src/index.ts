@@ -7,7 +7,6 @@ import {localize} from './localize/localize';
 
 import {version} from '../package.json';
 import {globalData} from './helpers/globals';
-import {config} from 'typescript-eslint';
 
 export const CARD_VERSION = version;
 
