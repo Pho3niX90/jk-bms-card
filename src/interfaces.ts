@@ -1,4 +1,5 @@
 import {LovelaceCardConfig} from 'custom-card-helpers';
+import {EntityKey} from './const';
 
 export interface JkBmsCardConfig extends LovelaceCardConfig {
     title: string;
@@ -6,4 +7,5 @@ export interface JkBmsCardConfig extends LovelaceCardConfig {
     cellCount: number;
     cellColumns: number;
     cellLayout: 'incremental' | 'bankMode';
+    entities: EntityKey;
 }

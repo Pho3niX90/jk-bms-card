@@ -1,6 +1,6 @@
 import {fireEvent, HomeAssistant, LovelaceCardEditor, LovelaceConfig} from 'custom-card-helpers';
 import {html, LitElement, TemplateResult} from 'lit';
-import {EDITOR_NAME} from './const';
+import {EDITOR_NAME, EntityKey} from './const';
 import {customElement, property} from 'lit/decorators.js';
 import {JkBmsCardConfig} from './interfaces';
 import {localize} from './localize/localize';
@@ -19,6 +19,8 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         if (!this._config || !this.hass) {
             return html``;
         }
+
+        const entityConfigs = Object.values(EntityKey).map((key: string) => ({name: key, selector: {entity: {}}}))
 
         return html`
 			<ha-form
@@ -66,6 +68,17 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                                 ]
                                             } }}
                                 ],
+                            },
+                        ],
+                    },
+                    {
+                        type: 'expandable',
+                        title: localize('config.manualAssignment'),
+                        schema: [
+                            {
+                                name: 'entities',
+                                type: 'grid',
+                                schema: entityConfigs,
                             },
                         ],
                     }

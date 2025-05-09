@@ -9,7 +9,8 @@
     "prefix": "Prefix of the sensors",
     "cellCount": "Number of cells",
     "cellColumns": "Number of columns",
-    "cellLayout": "Cell Layout"
+    "cellLayout": "Cell Layout",
+    "manualAssignment": "Manual entity assignment"
   },
   "switches": {
     "charge": "Charge",

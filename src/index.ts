@@ -1,12 +1,13 @@
 import {css, html, LitElement, TemplateResult} from 'lit';
 import {customElement, property} from 'lit/decorators.js';
 import {HomeAssistant, LovelaceCardEditor} from 'custom-card-helpers';
-import {EDITOR_NAME, MAIN_NAME} from './const';
+import {EDITOR_NAME, EntityKey, MAIN_NAME} from './const';
 import {JkBmsCardConfig} from './interfaces';
 import {localize} from './localize/localize';
 
 import {version} from '../package.json';
 import {globalData} from './helpers/globals';
+import {config} from 'typescript-eslint';
 
 export const CARD_VERSION = version;
 
@@ -24,16 +25,19 @@ export class JkBmsCard extends LitElement{
     @property() private _config?: JkBmsCardConfig;
 
     public setConfig(config: JkBmsCardConfig): void {
+        this._config = JkBmsCard.getStubConfig();
         this._config = {...this._config, ...config};
     }
 
     static getStubConfig() {
+        const entities = Object.keys(EntityKey).map((key: string) => ({[key]: ''}));
         return {
             title: localize("title"),
             prefix: "jk_bms",
             cellCount: 16,
             cellColumns: 2,
             cellLayout: "bankMode",
+            entities: entities
         } as unknown as JkBmsCardConfig;
     }
 
@@ -168,14 +172,15 @@ export class JkBmsCard extends LitElement{
         }
     `;
 
-    private _navigate(event, entityId: string, type: "sensor" | "switch" | "number" = "sensor") {
+    private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" = "sensor") {
         if (!event) {
             return;
         }
 
         event.stopPropagation();
 
-        const fullEntityId = type + "." + this._config?.prefix + "_" + entityId;
+        const configValue = this.configOrEnum(entityId)
+        const fullEntityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : type + "." + this._config?.prefix + "_" + configValue;
         let customEvent = new CustomEvent('hass-more-info', {
             detail: { entityId: fullEntityId },
             composed: true,
@@ -183,12 +188,28 @@ export class JkBmsCard extends LitElement{
         event.target.dispatchEvent(customEvent);
     }
 
-    private _state(suffix: string, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
-        const entityId = `${type}.${this._config!.prefix}_${suffix}`;
+    private getState(entityKey: EntityKey, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
+        const configValue = this.configOrEnum(entityKey)
+        const entityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : `${type}.${this._config!.prefix}_${configValue}`;
         const entity = this.hass?.states[entityId];
         const state = entity?.state;
 
         return state ?? defaultValue;
+    }
+
+    private _renderSwitch(entityId: EntityKey, label: string): TemplateResult {
+        const state = this.getState(entityId, '', "switch");
+        const colorClass = state === 'on' ? 'status-on' : 'status-off';
+        return html`
+      <div class="button-border button-padding center clickable" @click=${(e) => this._navigate(e, entityId, "switch")}>
+        ${localize('switches.'+label)}: <span class="${colorClass}">${state.toUpperCase()}</span>
+      </div>
+    `;
+    }
+
+    configOrEnum(entityId: EntityKey) {
+        const configValue = this._config?.entities[entityId]?.toString()?.trim();
+        return configValue && configValue.length > 1 ? configValue : entityId.toString();
     }
 
     render() {
@@ -196,10 +217,10 @@ export class JkBmsCard extends LitElement{
         if (!this.hass || !this._config) return html``;
         const title = this._config.title || 'Bat 1';
 
-        const deltaCellV = parseFloat(this._state('delta_cell_voltage', '0'));
-        const balanceCurrent = parseFloat(this._state('balancing_current', '0'));
-        const powerNumber = parseFloat(this._state('power', '0'));
-        const triggerV= Number(this._state("balance_trigger_voltage", "", "number"));
+        const deltaCellV = parseFloat(this.getState(EntityKey.delta_cell_voltage, '0'));
+        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, '0'));
+        const powerNumber = parseFloat(this.getState(EntityKey.power, '0'));
+        const triggerV= Number(this.getState(EntityKey.balance_trigger_voltage, "", "number"));
 
         const powerClass = powerNumber > 0 ? 'power-positive' : powerNumber < 0 ? 'power-negative' : 'power-even'
         const balanceClass = balanceCurrent > 0 ? 'balance-positive' : balanceCurrent < 0 ? 'balance-negative' : 'balance-even';
@@ -208,44 +229,44 @@ export class JkBmsCard extends LitElement{
         return html`
       <ha-card>
         <div class="grid grid-1 p-3 section-padding">
-          <div class="center clickable" @click=${(e) => this._navigate(e, `total_runtime_formatted`)}>
-            ${title} | Time: <b><font color="#3090C7">${this._state('total_runtime_formatted').toUpperCase()}</font></b>
+          <div class="center clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
+            ${title} | Time: <b><font color="#3090C7">${this.getState(EntityKey.total_runtime_formatted).toUpperCase()}</font></b>
           </div>
         </div>
 
         <div class="grid grid-3">
-          ${this._renderSwitch('charging', 'charge')}
-          ${this._renderSwitch('discharging', 'discharge')}
-          ${this._renderSwitch('balancer', 'balance')}
+          ${this._renderSwitch(EntityKey.charging, 'charge')}
+          ${this._renderSwitch(EntityKey.discharging, 'discharge')}
+          ${this._renderSwitch(EntityKey.balancer, 'balance')}
         </div>
           
           ${this._renderError()}
 
         <div class="grid grid-2 section-padding">
           <div class="stats-padding stats-border">
-            <div class="clickable center" @click=${(e) => this._navigate(e, `total_voltage`)}>
-              <b><font color="#41CD52" size="6">${this._state('total_voltage')} V</font></b>
+            <div class="clickable center" @click=${(e) => this._navigate(e, EntityKey.total_voltage)}>
+              <b><font color="#41CD52" size="6">${this.getState(EntityKey.total_voltage)} V</font></b>
             </div>
-              ${localize('stats.power')} <span class="clickable ${powerClass}" @click=${(e) => this._navigate(e, `power`)}>${this._state('power')} W</span><br>
-              ${localize('stats.capacity')} <span class="clickable" @click=${(e) => this._navigate(e, `total_battery_capacity_setting`)}>${this._state('total_battery_capacity_setting')} Ah</span><br>
-              ${localize('stats.cycleCapacity')} <span class="clickable" @click=${(e) => this._navigate(e, `total_charging_cycle_capacity`)}>${this._state('total_charging_cycle_capacity')} Ah</span><br>
-              ${localize('stats.averageCellV')} <span class="clickable" @click=${(e) => this._navigate(e, `average_cell_voltage`)}>${this._state('average_cell_voltage')} V</span><br>
+              ${localize('stats.power')} <span class="clickable ${powerClass}" @click=${(e) => this._navigate(e, EntityKey.power)}>${this.getState(EntityKey.power)} W</span><br>
+              ${localize('stats.capacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.total_battery_capacity_setting)}>${this.getState(EntityKey.total_battery_capacity_setting)} Ah</span><br>
+              ${localize('stats.cycleCapacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.total_charging_cycle_capacity)}>${this.getState(EntityKey.total_charging_cycle_capacity)} Ah</span><br>
+              ${localize('stats.averageCellV')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.average_cell_voltage)}>${this.getState(EntityKey.average_cell_voltage)} V</span><br>
               ${localize('stats.balanceCurrent')} <span class="${balanceClass}">
               ${balanceCurrent.toFixed(1)} A
             </span>
           </div>
 
           <div class="stats-padding stats-border">
-            <div class="clickable center" @click=${(e) => this._navigate(e, `current`)}>
-              <b><font color="#41CD52" size="6">${this._state('current')} A</font></b>
+            <div class="clickable center" @click=${(e) => this._navigate(e, EntityKey.current)}>
+              <b><font color="#41CD52" size="6">${this.getState(EntityKey.current)} A</font></b>
             </div>
-              ${localize('stats.stateOfCharge')} <span class="clickable" @click=${(e) => this._navigate(e, `state_of_charge`)}>${this._state('state_of_charge')} %</span><br>
-              ${localize('stats.remainingAmps')} <span class="clickable" @click=${(e) => this._navigate(e, `capacity_remaining`)}>${this._state('capacity_remaining')} Ah</span><br>
-              ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, `charging_cycles`)}>${this._state('charging_cycles')}</span><br>
+              ${localize('stats.stateOfCharge')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>${this.getState(EntityKey.state_of_charge)} %</span><br>
+              ${localize('stats.remainingAmps')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>${this.getState(EntityKey.capacity_remaining)} Ah</span><br>
+              ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.charging_cycles)}>${this.getState(EntityKey.charging_cycles)}</span><br>
               ${localize('stats.delta')} <span class="${deltaClass}">
               ${deltaCellV.toFixed(3)} V
             </span><br>
-              ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, `power_tube_temperature`)}>${this._state('power_tube_temperature')} °C</span>
+              ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
           </div>
         </div>
 
@@ -274,21 +295,11 @@ export class JkBmsCard extends LitElement{
 
 
     private _renderError() {
-        const state = this._state('errors', '', "sensor");
+        const state = this.getState(EntityKey.errors);
         if (state.trim().length <= 1) {
             return html``
         }
         return html`<span class="error-message">${state}</span>`
-    }
-
-    private _renderSwitch(entityId: string, label: string): TemplateResult {
-        const state = this._state(entityId, '', "switch");
-        const colorClass = state === 'on' ? 'status-on' : 'status-off';
-        return html`
-      <div class="button-border button-padding center clickable" @click=${(e) => this._navigate(e, `${entityId}`, "switch")}>
-        ${localize('switches.'+label)}: <span class="${colorClass}">${state.toUpperCase()}</span>
-      </div>
-    `;
     }
 
     private _renderCells(bankmode = true): TemplateResult {
@@ -319,23 +330,23 @@ export class JkBmsCard extends LitElement{
     }
 
     private _createCell(i) {
-        const voltage = this._state(`cell_voltage_${i}`, '0.0');
-        const resistance = this._state(`cell_resistance_${i}`, '');
-        const minCell = this._state('min_voltage_cell');
-        const maxCell = this._state('max_voltage_cell');
+        const voltage = this.getState(EntityKey[`cell_voltage_${i}`], '0.0');
+        const resistance = this.getState(EntityKey[`cell_resistance_${i}`]);
+        const minCell = this.getState(EntityKey.min_voltage_cell);
+        const maxCell = this.getState(EntityKey.max_voltage_cell);
 
         const color = i.toString() === minCell ? 'voltage-low'
             : i.toString() === maxCell ? 'voltage-high'
             : '';
 
         let resistanceHtml = resistance == '' ? '' : html`
-            <span class="clickable" @click=${(e) => this._navigate(e, `cell_resistance_${i}`)}>
+            <span class="clickable" @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`])}>
             / ${resistance} Ω
           </span>`
 
         return html`
             <div class="center cell-container" id="cell-${i}">
-            <span class="clickable" @click=${(e) => this._navigate(e, `cell_voltage_${i}`)}>
+            <span class="clickable" @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`],)}>
                 <span class="pill">${i.toString().padStart(2, '0')}</span>
             ${color ? html`<span class="${color}">${voltage} V</span>` : html`${voltage} V`}
           </span>
@@ -344,9 +355,9 @@ export class JkBmsCard extends LitElement{
         `;
     }
     private _updateFlowLine() {
-        const minId = this._state('min_voltage_cell');
-        const maxId = this._state('max_voltage_cell');
-        const balanceCurrent = parseFloat(this._state('balancing_current', '0'));
+        const minId = this.getState(EntityKey.min_voltage_cell);
+        const maxId = this.getState(EntityKey.max_voltage_cell);
+        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, '0'));
 
         const minEl = this.renderRoot.querySelector(`#cell-${minId}`);
         const maxEl = this.renderRoot.querySelector(`#cell-${maxId}`);
