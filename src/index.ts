@@ -29,14 +29,16 @@ export class JkBmsCard extends LitElement{
     }
 
     static getStubConfig() {
-        const entities = Object.keys(EntityKey).map((key: string) => ({[key]: ''}));
         return {
             title: localize("title"),
             prefix: "jk_bms",
             cellCount: 16,
             cellColumns: 2,
             cellLayout: "bankMode",
-            entities: entities
+            entities: Object.keys(EntityKey).reduce((acc, key) => {
+                acc[key as EntityKey] = '';
+                return acc;
+            }, {} as Record<EntityKey, string>)
         } as unknown as JkBmsCardConfig;
     }
 
