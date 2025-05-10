@@ -345,8 +345,11 @@ export class JkBmsCard extends LitElement{
         let maxId = 0;
 
         for (let i = 1; i <= totalCells; i++) {
-            const voltage = parseFloat(this.getState(EntityKey[`cell_voltage_${i}`], '0.0'));
-
+            const state = this.getState(EntityKey[`cell_voltage_${i}`], '')
+            const voltage = parseFloat(state);
+            if (isNaN(voltage)) {
+                continue;
+            }
             if (voltage > maxVoltage) {
                 maxVoltage = voltage;
                 maxId = i;
@@ -371,8 +374,8 @@ export class JkBmsCard extends LitElement{
     private _createCell(i) {
         const voltage = this.getState(EntityKey[`cell_voltage_${i}`], '0.0');
         const resistance = this.getState(EntityKey[`cell_resistance_${i}`]);
-        const minCell = this.getState(EntityKey.min_voltage_cell);
-        const maxCell = this.getState(EntityKey.max_voltage_cell);
+        const minCell = this.minCellId;
+        const maxCell = this.maxCellId;
 
         const color = i.toString() === minCell ? 'voltage-low'
             : i.toString() === maxCell ? 'voltage-high'
@@ -394,11 +397,10 @@ export class JkBmsCard extends LitElement{
         `;
     }
     private _updateFlowLine() {
-        const {minId, maxId} = this.getMinMaxCell()
         const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, '0'));
 
-        const minEl = this.renderRoot.querySelector(`#cell-${minId}`);
-        const maxEl = this.renderRoot.querySelector(`#cell-${maxId}`);
+        const minEl = this.renderRoot.querySelector(`#cell-${this.minCellId}`);
+        const maxEl = this.renderRoot.querySelector(`#cell-${this.maxCellId}`);
         const path = this.renderRoot.querySelector('#flow-path') as SVGPathElement;
 
         if (!path) return;
