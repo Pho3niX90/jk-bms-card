@@ -1,0 +1,14 @@
+{
+  "name": "jk-bms-card",
+  "dockerFile": "Dockerfile",
+  "context": "..",
+  "appPort": [3000],
+  "extensions": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode"
+  ],
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  "postCreateCommand": "npm install"
+}

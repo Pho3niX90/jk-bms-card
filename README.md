@@ -25,3 +25,7 @@ if your entities start with **jk_bms**_total_voltage, your prefix will be **jk_b
 ![img_1.png](images/img_1.png)
 
 PR's are welcomed. 
+
+
+## Build
+npm run build
