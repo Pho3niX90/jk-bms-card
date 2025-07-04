@@ -21,11 +21,11 @@
     "power": "C. Suất:",
     "capacity": "T1:",
     "cycleCapacity": "T3:",
-    "averageCellV": "Áp TB",
-    "balanceCurrent": "Cân Bằng",
+    "averageCellV": "Áp TB:",
+    "balanceCurrent": "Cân Bằng:",
     "stateOfCharge": "SOC:",
-    "remainingAmps": "T2",
-    "cycles": "T4",
+    "remainingAmps": "T2:",
+    "cycles": "T4:",
     "delta": "Lệch cell:",
     "mosfetTemp": "MOS Temp:"
   }
