@@ -1,10 +1,10 @@
 import * as en from './languages/en.json';
-import * as vi from './languages/vi.json';
+// import * as vi from './languages/vi.json';
 import {globalData} from '../helpers/globals';
 
 const languages: any = {
     en: en,
-    vi: vi,
+    // vi: vi,
 };
 
 export function localize(string: string, search = '', replace = '') {
