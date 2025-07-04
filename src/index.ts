@@ -237,12 +237,6 @@ export class JkBmsCard extends LitElement{
             ${title} | Time: <b><font color="#3090C7">${this.getState(EntityKey.total_runtime_formatted).toUpperCase()}</font></b>
           </div>
         </div>
-
-        <div class="grid grid-3">
-          ${this._renderSwitch(EntityKey.charging, 'charge')}
-          ${this._renderSwitch(EntityKey.discharging, 'discharge')}
-          ${this._renderSwitch(EntityKey.balancer, 'balance')}
-        </div>
           
           ${this._renderError()}
 
