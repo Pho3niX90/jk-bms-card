@@ -245,11 +245,11 @@ export class JkBmsCard extends LitElement{
             <div class="clickable center" @click=${(e) => this._navigate(e, EntityKey.total_voltage)}>
               <b><font color="#41CD52" size="6">${this.getState(EntityKey.total_voltage)} V</font></b>
             </div>
-              ${localize('stats.power')} <span class="clickable ${powerClass}" @click=${(e) => this._navigate(e, EntityKey.power)}>${this.getState(EntityKey.power)} W</span><br>
-              ${localize('stats.capacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_1)}>${this.getState(EntityKey.temperature_sensor_1)} °C</span><br>
-              ${localize('stats.cycleCapacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_3)}>${this.getState(EntityKey.temperature_sensor_3)} °C</span><br>
-              ${localize('stats.averageCellV')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.average_cell_voltage)}>${this.getState(EntityKey.average_cell_voltage)} V</span><br>
-              ${localize('stats.balanceCurrent')} <span class="${balanceClass}">
+              ${localize('stats.power')} <span class="clickable ${powerClass} center" @click=${(e) => this._navigate(e, EntityKey.power)}>${this.getState(EntityKey.power)} W</span><br>
+              ${localize('stats.capacity')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_1)}>${this.getState(EntityKey.temperature_sensor_1)} °C</span><br>
+              ${localize('stats.cycleCapacity')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_3)}>${this.getState(EntityKey.temperature_sensor_3)} °C</span><br>
+              ${localize('stats.averageCellV')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.average_cell_voltage)}>${this.getState(EntityKey.average_cell_voltage)} V</span><br>
+              ${localize('stats.balanceCurrent')} <span class="${balanceClass} center">
               ${balanceCurrent.toFixed(1)} A
             </span>
           </div>
@@ -258,11 +258,11 @@ export class JkBmsCard extends LitElement{
             <div class="clickable center" @click=${(e) => this._navigate(e, EntityKey.current)}>
               <b><font color="#41CD52" size="6">${this.getState(EntityKey.current)} A</font></b>
             </div>
-              ${localize('stats.stateOfCharge')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>${this.getState(EntityKey.state_of_charge)} %</span><br>
-              ${localize('stats.remainingAmps')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_2)}>${this.getState(EntityKey.temperature_sensor_2)} °C</span><br>
-              ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_4)}>${this.getState(EntityKey.temperature_sensor_4)} °C</span><br>
-              ${localize('stats.delta')} <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${deltaCellV.toFixed(3)} V </span><br>
-              ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
+              ${localize('stats.stateOfCharge')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>${this.getState(EntityKey.state_of_charge)} %</span><br>
+              ${localize('stats.remainingAmps')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_2)}>${this.getState(EntityKey.temperature_sensor_2)} °C</span><br>
+              ${localize('stats.cycles')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_4)}>${this.getState(EntityKey.temperature_sensor_4)} °C</span><br>
+              ${localize('stats.delta')} <span class="${deltaClass} center" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${deltaCellV.toFixed(3)} V </span><br>
+              ${localize('stats.mosfetTemp')} <span class="clickable center" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
           </div>
         </div>
 
