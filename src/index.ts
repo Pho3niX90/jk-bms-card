@@ -25,6 +25,7 @@ export class JkBmsCard extends LitElement{
 
     minCellId: string = '';
     maxCellId: string = '';
+    shouldBalance: boolean = false;
 
     public setConfig(config: JkBmsCardConfig): void {
         this._config = JkBmsCard.getStubConfig();
@@ -197,6 +198,10 @@ export class JkBmsCard extends LitElement{
         const entityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : `${type}.${this._config!.prefix}_${configValue}`;
         const entity = this.hass?.states[entityId];
         const state = entity?.state;
+        const stateNumeric = Number(state);
+
+        if (!isNaN(stateNumeric))
+            return stateNumeric.toFixed(2);
 
         return state ?? defaultValue;
     }
@@ -226,15 +231,20 @@ export class JkBmsCard extends LitElement{
         const powerNumber = parseFloat(this.getState(EntityKey.power, '0'));
         const triggerV= Number(this.getState(EntityKey.balance_trigger_voltage, "", "number"));
 
+        this.shouldBalance = deltaCellV >= triggerV;
+
         const powerClass = powerNumber > 0 ? 'power-positive' : powerNumber < 0 ? 'power-negative' : 'power-even'
         const balanceClass = balanceCurrent > 0 ? 'balance-positive' : balanceCurrent < 0 ? 'balance-negative' : 'balance-even';
-        const deltaClass = deltaCellV >= triggerV ? 'delta-needs-balancing' : 'delta-ok'
+        const deltaClass = this.shouldBalance ? 'delta-needs-balancing' : 'delta-ok';
+
+        const runtime = this.getState(EntityKey.total_runtime_formatted);
+        const header = runtime && runtime != "unknown" ? html` | Time: <b><font color="#3090C7">${runtime.toUpperCase()}</font></b>` : ''
 
         return html`
       <ha-card>
         <div class="grid grid-1 p-3 section-padding">
           <div class="center clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
-            ${title} | Time: <b><font color="#3090C7">${this.getState(EntityKey.total_runtime_formatted).toUpperCase()}</font></b>
+            ${title}${header}
           </div>
         </div>
 
@@ -405,7 +415,7 @@ export class JkBmsCard extends LitElement{
 
         if (!path) return;
 
-        if (balanceCurrent === 0 || !minEl || !maxEl) {
+        if ((!this.shouldBalance && balanceCurrent === 0) || !minEl || !maxEl) {
             path.setAttribute('d', '');
             path.style.display = 'none';
             return;
