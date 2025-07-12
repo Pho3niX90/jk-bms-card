@@ -330,7 +330,7 @@ export class JkBmsCard extends LitElement{
         this.minCellId = this.getState(EntityKey.min_voltage_cell, 0);
         this.maxCellId = this.getState(EntityKey.max_voltage_cell, 0);
 
-        if (!this.minCellId || !this.maxCellId) {
+        if (!this.minCellId || !this.maxCellId ||!this.maxDeltaV || this.maxDeltaV == 0 || true) {
             this.calculateDynamicMinMaxCellId(totalCells)
         }
 
@@ -358,7 +358,7 @@ export class JkBmsCard extends LitElement{
         let maxId = 0;
 
         for (let i = 1; i <= totalCells; i++) {
-            const state = this.getState(EntityKey[`cell_voltage_${i}`], 0, '')
+            const state = this.getState(EntityKey[`cell_voltage_${i}`], 3, '')
             const voltage = parseFloat(state);
             if (isNaN(voltage)) {
                 continue;
@@ -376,7 +376,7 @@ export class JkBmsCard extends LitElement{
 
         this.minCellId = String(minId);
         this.maxCellId = String(maxId);
-        this.maxDeltaV = maxVoltage - minVoltage;
+        this.maxDeltaV = Number((maxVoltage - minVoltage).toFixed(3));
     }
 
     private getMinMaxCell() {
