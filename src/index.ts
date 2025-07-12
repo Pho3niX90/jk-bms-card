@@ -233,6 +233,8 @@ export class JkBmsCard extends LitElement{
 
         this.shouldBalance = deltaCellV >= triggerV;
 
+        this.shouldBalance = deltaCellV >= triggerV;
+
         const powerClass = powerNumber > 0 ? 'power-positive' : powerNumber < 0 ? 'power-negative' : 'power-even'
         const balanceClass = balanceCurrent > 0 ? 'balance-positive' : balanceCurrent < 0 ? 'balance-negative' : 'balance-even';
         const deltaClass = this.shouldBalance ? 'delta-needs-balancing' : 'delta-ok';
