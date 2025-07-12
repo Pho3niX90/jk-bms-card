@@ -25,6 +25,7 @@ export class JkBmsCard extends LitElement{
 
     minCellId: string = '';
     maxCellId: string = '';
+    maxDeltaV: number = 0.000;
     shouldBalance: boolean = false;
 
     public setConfig(config: JkBmsCardConfig): void {
@@ -226,14 +227,14 @@ export class JkBmsCard extends LitElement{
         if (!this.hass || !this._config) return html``;
         const title = this._config.title || 'Bat 1';
 
-        const deltaCellV = parseFloat(this.getState(EntityKey.delta_cell_voltage, 3, '0'));
+        this.maxDeltaV = parseFloat(this.getState(EntityKey.delta_cell_voltage, 3, '0'));
         const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, 2, '0'));
         const powerNumber = parseFloat(this.getState(EntityKey.power, 2, '0'));
         const triggerV= Number(this.getState(EntityKey.balance_trigger_voltage, 2, "", "number"));
 
-        this.shouldBalance = deltaCellV >= triggerV;
+        this.shouldBalance = this.maxDeltaV >= triggerV;
 
-        this.shouldBalance = deltaCellV >= triggerV;
+        this.shouldBalance = this.maxDeltaV >= triggerV;
 
         const powerClass = powerNumber > 0 ? 'power-positive' : powerNumber < 0 ? 'power-negative' : 'power-even'
         const balanceClass = balanceCurrent > 0 ? 'balance-positive' : balanceCurrent < 0 ? 'balance-negative' : 'balance-even';
@@ -279,7 +280,7 @@ export class JkBmsCard extends LitElement{
               ${localize('stats.stateOfCharge')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>${this.getState(EntityKey.state_of_charge)} %</span><br>
               ${localize('stats.remainingAmps')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>${this.getState(EntityKey.capacity_remaining)} Ah</span><br>
               ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.charging_cycles)}>${this.getState(EntityKey.charging_cycles)}</span><br>
-              ${localize('stats.delta')} <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${deltaCellV.toFixed(3)} V </span><br>
+              ${localize('stats.delta')} <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${this.maxDeltaV.toFixed(3)} V </span><br>
               ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
           </div>
         </div>
@@ -375,6 +376,7 @@ export class JkBmsCard extends LitElement{
 
         this.minCellId = String(minId);
         this.maxCellId = String(maxId);
+        this.maxDeltaV = maxVoltage - minVoltage;
     }
 
     private getMinMaxCell() {
