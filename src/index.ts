@@ -193,7 +193,7 @@ export class JkBmsCard extends LitElement{
         event.target.dispatchEvent(customEvent);
     }
 
-    private getState(entityKey: EntityKey, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
+    private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
         const configValue = this.configOrEnum(entityKey)
         const entityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : `${type}.${this._config!.prefix}_${configValue}`;
         const entity = this.hass?.states[entityId];
@@ -201,13 +201,13 @@ export class JkBmsCard extends LitElement{
         const stateNumeric = Number(state);
 
         if (!isNaN(stateNumeric))
-            return stateNumeric.toFixed(2);
+            return stateNumeric.toFixed(precision);
 
         return state ?? defaultValue;
     }
 
     private _renderSwitch(entityId: EntityKey, label: string): TemplateResult {
-        const state = this.getState(entityId, '', "switch");
+        const state = this.getState(entityId, 0, '', "switch");
         const colorClass = state === 'on' ? 'status-on' : 'status-off';
         return html`
       <div class="button-border button-padding center clickable" @click=${(e) => this._navigate(e, entityId, "switch")}>
@@ -226,10 +226,10 @@ export class JkBmsCard extends LitElement{
         if (!this.hass || !this._config) return html``;
         const title = this._config.title || 'Bat 1';
 
-        const deltaCellV = parseFloat(this.getState(EntityKey.delta_cell_voltage, '0'));
-        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, '0'));
-        const powerNumber = parseFloat(this.getState(EntityKey.power, '0'));
-        const triggerV= Number(this.getState(EntityKey.balance_trigger_voltage, "", "number"));
+        const deltaCellV = parseFloat(this.getState(EntityKey.delta_cell_voltage, 3, '0'));
+        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, 2, '0'));
+        const powerNumber = parseFloat(this.getState(EntityKey.power, 2, '0'));
+        const triggerV= Number(this.getState(EntityKey.balance_trigger_voltage, 2, "", "number"));
 
         this.shouldBalance = deltaCellV >= triggerV;
 
@@ -307,8 +307,8 @@ export class JkBmsCard extends LitElement{
 
 
     private _renderError() {
-        const state = this.getState(EntityKey.errors);
-        if (state.trim().length <= 1) {
+        const state = this.getState(EntityKey.errors, 0);
+        if (state.trim().length <= 1 || state == '0') {
             return html``
         }
         return html`<span class="error-message">${state}</span>`
@@ -324,8 +324,8 @@ export class JkBmsCard extends LitElement{
         const end = bankmode ? Math.ceil(totalCells / columns) : totalCells;
         const uneven = totalCells % columns
 
-        this.minCellId = this.getState(EntityKey.min_voltage_cell);
-        this.maxCellId = this.getState(EntityKey.max_voltage_cell);
+        this.minCellId = this.getState(EntityKey.min_voltage_cell, 0);
+        this.maxCellId = this.getState(EntityKey.max_voltage_cell, 0);
 
         if (!this.minCellId || !this.maxCellId) {
             this.calculateDynamicMinMaxCellId(totalCells)
@@ -355,7 +355,7 @@ export class JkBmsCard extends LitElement{
         let maxId = 0;
 
         for (let i = 1; i <= totalCells; i++) {
-            const state = this.getState(EntityKey[`cell_voltage_${i}`], '')
+            const state = this.getState(EntityKey[`cell_voltage_${i}`], 0, '')
             const voltage = parseFloat(state);
             if (isNaN(voltage)) {
                 continue;
@@ -382,8 +382,8 @@ export class JkBmsCard extends LitElement{
     }
 
     private _createCell(i) {
-        const voltage = this.getState(EntityKey[`cell_voltage_${i}`], '0.0');
-        const resistance = this.getState(EntityKey[`cell_resistance_${i}`]);
+        const voltage = this.getState(EntityKey[`cell_voltage_${i}`], 2, '0.0');
+        const resistance = this.getState(EntityKey[`cell_resistance_${i}`], 2);
         const minCell = this.minCellId;
         const maxCell = this.maxCellId;
 
@@ -407,7 +407,7 @@ export class JkBmsCard extends LitElement{
         `;
     }
     private _updateFlowLine() {
-        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, '0'));
+        const balanceCurrent = parseFloat(this.getState(EntityKey.balancing_current, 3, '0'));
 
         const minEl = this.renderRoot.querySelector(`#cell-${this.minCellId}`);
         const maxEl = this.renderRoot.querySelector(`#cell-${this.maxCellId}`);
