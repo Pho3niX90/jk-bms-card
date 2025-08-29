@@ -10,12 +10,15 @@
     "cellCount": "Number of cells",
     "cellColumns": "Number of columns",
     "cellLayout": "Cell Layout",
-    "manualAssignment": "Manual entity assignment"
+    "manualAssignment": "Manual entity assignment",
+    "tempSensorsCount": "Number of temperature sensors available",
+    "hasHeater": "Heater option is used"
   },
   "switches": {
     "charge": "Charge",
     "discharge": "Discharge",
-    "balance": "Balance"
+    "balance": "Balance",
+    "heater": "Heater"
   },
   "stats": {
     "power": "Power:",
@@ -27,6 +30,10 @@
     "remainingAmps": "Remaining:",
     "cycles": "Cycles:",
     "delta": "Delta V:",
-    "mosfetTemp": "MOS Temp:"
+    "mosfetTemp": "MOS Temp:",
+    "temperature_sensor_1": "Temp. 1:",
+    "temperature_sensor_2": "Temp. 2:",
+    "temperature_sensor_3": "Temp. 3:",
+    "temperature_sensor_4": "Temp. 4:"
   }
 }

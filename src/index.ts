@@ -40,6 +40,8 @@ export class JkBmsCard extends LitElement{
             cellCount: 16,
             cellColumns: 2,
             cellLayout: "bankMode",
+            tempSensorsCount: 0,
+            hasHeater: 0,
             entities: Object.keys(EntityKey).reduce((acc, key) => {
                 acc[key as EntityKey] = '';
                 return acc;
@@ -254,10 +256,11 @@ export class JkBmsCard extends LitElement{
           </div>
         </div>
 
-        <div class="grid grid-3">
+        <div class="grid grid-${this._config.hasHeater=='1'?'4':'3'}">
           ${this._renderSwitch(EntityKey.charging, 'charge')}
           ${this._renderSwitch(EntityKey.discharging, 'discharge')}
           ${this._renderSwitch(EntityKey.balancer, 'balance')}
+          ${this._config.hasHeater == '1' ? this._renderSwitch(EntityKey.heater, 'heater') : ''}
         </div>
           
           ${this._renderError()}
@@ -274,6 +277,7 @@ export class JkBmsCard extends LitElement{
               ${localize('stats.balanceCurrent')} <span class="${balanceClass}">
               ${balanceCurrent.toFixed(1)} A
             </span>
+              ${this._renderTemps(1)}
           </div>
 
           <div class="stats-padding stats-border">
@@ -285,6 +289,7 @@ export class JkBmsCard extends LitElement{
               ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.charging_cycles)}>${this.getState(EntityKey.charging_cycles)}</span><br>
               ${localize('stats.delta')} <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${this.maxDeltaV.toFixed(3)} V </span><br>
               ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
+              ${this._renderTemps(2)}
           </div>
         </div>
 
@@ -320,6 +325,16 @@ export class JkBmsCard extends LitElement{
         return html`<span class="error-message">${state}</span>`
     }
 
+    private _renderTemps(placement): TemplateResult {
+        const sensors: TemplateResult[] = [];
+        const sensorsCount = this._config?.tempSensorsCount ?? 0;
+        for (let i = placement; i <= sensorsCount; i += 2 ) {
+            sensors.push(html`
+                <br>${localize('stats.temperature_sensor_' + i)} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey['temperature_sensor_' + i])}>${this.getState(EntityKey['temperature_sensor_' + i])} °C</span>`);
+        }
+
+        return html`${sensors}`;
+    }
     private _renderCells(bankmode = true): TemplateResult {
         const cells: TemplateResult[] = [];
 
