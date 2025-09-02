@@ -72,6 +72,35 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                         ],
                     },
                     {
+                        type: 'grid',
+                        title: localize('config.tempSensorsCount'),
+                        schema: [
+                            {
+                                type: 'grid',
+                                schema: [
+                                    {name: 'tempSensorsCount', selector: {number: {min: 0, max: 4, step: 2}}},
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        type: 'grid',
+                        title: localize('config.hasHeater'),
+                        schema: [
+                            {
+                                type: 'grid',
+                                schema: [
+                                    {name: 'hasHeater', selector: {
+                                        select: { multiple: false, mode: "list", options: [
+                                          {label: "Yes", value: "1"},
+                                          {label: "No", value: "0"}
+                                        ]}
+                                    }},
+                                ],
+                            },
+                        ],
+                    },
+                    {
                         type: 'expandable',
                         title: localize('config.manualAssignment'),
                         schema: [

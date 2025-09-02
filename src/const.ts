@@ -10,6 +10,7 @@ export enum EntityKey {
     charging ='charging',
     discharging ='discharging',
     balancer ='balancer',
+    heater ='heater',
     total_voltage ='total_voltage',
     total_battery_capacity_setting ='total_battery_capacity_setting',
     total_charging_cycle_capacity ='total_charging_cycle_capacity',
@@ -89,4 +90,9 @@ export enum EntityKey {
     cell_resistance_30 ='cell_resistance_30',
     cell_resistance_31 ='cell_resistance_31',
     cell_resistance_32 ='cell_resistance_32',
+
+    temperature_sensor_1 ='temperature_sensor_1',
+    temperature_sensor_2 ='temperature_sensor_2',
+    temperature_sensor_3 ='temperature_sensor_3',
+    temperature_sensor_4 ='temperature_sensor_4',
 }
