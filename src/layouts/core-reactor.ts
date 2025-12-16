@@ -1,10 +1,10 @@
-import {css, html, LitElement, TemplateResult} from 'lit';
-import {customElement, property} from 'lit/decorators.js';
-import {HomeAssistant} from 'custom-card-helpers';
-import {EntityKey} from '../const';
-import {JkBmsCardConfig} from '../interfaces';
-import {globalData} from '../helpers/globals';
-import {configOrEnum, getState, navigate} from '../helpers/utils';
+import { css, html, LitElement, TemplateResult } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+import { HomeAssistant } from 'custom-card-helpers';
+import { EntityKey } from '../const';
+import { JkBmsCardConfig } from '../interfaces';
+import { globalData } from '../helpers/globals';
+import { configOrEnum, getState, navigate } from '../helpers/utils';
 
 @customElement('jk-bms-core-reactor-layout')
 export class JkBmsCoreReactorLayout extends LitElement {
@@ -400,14 +400,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 // Create new array to trigger reactivity if needed, or just push
                 // For Lit reactivity on objects/arrays, purely pushing might not trigger unless we reassign or requestUpdate
                 // But efficient way is:
-                const newHistoryList = [...currentHistory, {state: val, time: time}];
+                const newHistoryList = [...currentHistory, { state: val, time: time }];
 
                 // Prune old
                 while (newHistoryList.length > 0 && newHistoryList[0].time < oneHourAgo) {
                     newHistoryList.shift();
                 }
 
-                this.historyData = {...this.historyData, [entityId]: newHistoryList};
+                this.historyData = { ...this.historyData, [entityId]: newHistoryList };
                 changed = true;
             }
         });
@@ -463,7 +463,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         })).filter(e => !isNaN(e.state));
                     }
                 });
-                this.historyData = {...this.historyData, ...newHistory};
+                this.historyData = { ...this.historyData, ...newHistory };
             }
         } catch (e) {
             console.warn("JK BMS Card: Failed to fetch history via WS", e);
@@ -498,7 +498,6 @@ export class JkBmsCoreReactorLayout extends LitElement {
             if (cState < min) min = cState;
             if (cState > max) max = cState;
         });
-        console.log(`Sparkline: ${entityKey} min/max: ${min}/${max}`);
 
         // Add 5% padding to min/max to avoid flatlining at edges unless flat
         let range = max - min;
@@ -682,27 +681,30 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
     private calculateDynamicMinMax() {
         // Logic reused/adapted from default layout to find min/max cell for highlighting
-        // For now, simplified version
-        let minV = 100, maxV = 0;
-        let minId = '', maxId = '';
+        let minV = Infinity;
+        let maxV = -Infinity;
+        let minId = '';
+        let maxId = '';
         const count = this.config.cellCount || 16;
 
         for (let i = 1; i <= count; i++) {
-            const v = parseFloat(this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '0'));
-            if (v > 0) {
-                if (v < minV) {
-                    minV = v;
-                    minId = String(i);
-                }
-                if (v > maxV) {
-                    maxV = v;
-                    maxId = String(i);
-                }
+            const vStr = this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '');
+            const v = parseFloat(vStr);
+            if (!isNaN(v)) {
+                if (v < minV) { minV = v; minId = String(i); }
+                if (v > maxV) { maxV = v; maxId = String(i); }
             }
         }
-        this.minCellId = minId;
-        this.maxCellId = maxId;
-        this.maxDeltaV = parseFloat((maxV - minV).toFixed(3));
+
+        if (minV === Infinity || maxV === -Infinity) {
+            this.maxDeltaV = 0;
+            this.minCellId = '';
+            this.maxCellId = '';
+        } else {
+            this.minCellId = minId;
+            this.maxCellId = maxId;
+            this.maxDeltaV = parseFloat((maxV - minV).toFixed(3));
+        }
     }
 
     private _renderCells(): TemplateResult[] {

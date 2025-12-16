@@ -28,7 +28,6 @@ export class JkBmsCard extends LitElement {
     public setConfig(config: JkBmsCardConfig): void {
         this._config = JkBmsCard.getStubConfig();
         this._config = { ...this._config, ...config };
-        console.log(this._config);
     }
 
     static getStubConfig() {
