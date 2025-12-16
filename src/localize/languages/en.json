@@ -10,6 +10,7 @@
     "cellCount": "Number of cells",
     "cellColumns": "Number of columns",
     "cellLayout": "Cell Layout",
+    "layout": "Layout",
     "manualAssignment": "Manual entity assignment",
     "tempSensorsCount": "Number of temperature sensors available",
     "hasHeater": "Heater option is used"

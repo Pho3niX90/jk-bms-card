@@ -2,8 +2,12 @@ I liked the layout of [Inspiration](https://github.com/syssi/esphome-jk-bms/disc
 
 ![multiple.png](images/multiple.png)
 
-## Balancing visualization
+# Layouts
+## Default
 ![balancing.gif](images/balancing.gif)
+
+## Core Reactor
+![core_reactor.png](images/core_reactor.png)
 
 inspired from: https://github.com/syssi/esphome-jk-bms/discussions/230
 integration from: https://github.com/syssi/esphome-jk-bms/tree/main
