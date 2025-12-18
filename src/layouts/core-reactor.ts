@@ -191,21 +191,65 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         .cell-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
             gap: 6px;
+        }
+
+        .grid-1 {
+            grid-template-columns: 1fr;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        .grid-5 {
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        .grid-6 {
+            grid-template-columns: repeat(6, 1fr);
+        }
+
+        .grid-7 {
+            grid-template-columns: repeat(7, 1fr);
+        }
+
+        .grid-8 {
+            grid-template-columns: repeat(8, 1fr);
         }
 
         .cell-item {
             background: #2a2a2a;
-            border-radius: 20px;
-            padding: 6px 12px;
+            border-radius: 8px;
+            padding: 4px 6px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 0.95em;
+            gap: 4px;
+            font-size: 0.85em;
             position: relative;
             overflow: hidden;
             z-index: 0;
+        }
+
+        .cell-item-vertical {
+            flex-direction: column;
+            justify-content: center;
+            padding: 6px 4px;
+            gap: 3px;
+        }
+
+        .cell-item-vertical .cell-id {
+            margin-right: 0;
+            margin-bottom: 2px;
         }
 
         .cell-item-bg {
@@ -219,26 +263,28 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .cell-id {
-            background: #37474f;
-            color: #b0bec5;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8em;
-            margin-right: 8px;
+            display: inline-block;
+            padding: 0.1rem 0.25rem;
+            background-color: #195569;
+            color: #e4f3f8;
+            border-radius: 999px;
+            font-weight: 500;
+            font-size: 0.7em;
+            min-width: 1.4rem;
+            text-align: center;
+            margin-right: 3px;
+            flex-shrink: 0;
         }
 
         .cell-volts {
             color: #e1e1e1;
             font-family: monospace;
+            font-size: 0.9em;
         }
 
         .cell-res {
             color: #90a4ae;
-            font-size: 0.85em;
+            font-size: 0.8em;
             font-family: monospace;
         }
 
@@ -662,21 +708,29 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
                         <div class="metric-group">
                             ${this._renderSparkline(EntityKey.delta_cell_voltage, '#41CD52')}
-                            <div class="stat-label">Delta V:</div>
+                            <div class="stat-label">Delta ${this.config.deltaVoltageUnit || 'V'}:</div>
                             <div class="stat-value val-green clickable"
-                                 @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}>${this.maxDeltaV} V
+                                 @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}>${this._formatDeltaVoltage()}
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Cells -->
-                <div class="cell-grid">
+                <div class="cell-grid grid-${this.config.cellColumns ?? 2}">
                     ${this._renderCells()}
                 </div>
 
             </ha-card>
         `;
+    }
+
+    private _formatDeltaVoltage(): string {
+        const unit = this.config.deltaVoltageUnit || 'V';
+        if (unit === 'mV') {
+            return `${(this.maxDeltaV * 1000).toFixed(0)} mV`;
+        }
+        return `${this.maxDeltaV.toFixed(3)} V`;
     }
 
     private calculateDynamicMinMax() {
@@ -709,8 +763,42 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
     private _renderCells(): TemplateResult[] {
         const cells: TemplateResult[] = [];
-        const count = this.config.cellCount || 16;
-        for (let i = 1; i <= count; i++) {
+        const bankMode = this.config.cellLayout === 'bankMode';
+        const columns = this.config.cellColumns || 2;
+        const totalCells = this.config.cellCount || 16;
+        const bankOffset = Math.floor(totalCells / columns);
+        const end = bankMode ? Math.ceil(totalCells / columns) : totalCells;
+        const uneven = totalCells % columns;
+
+        for (let i = 1; i <= end; i++) {
+            // Determine which cells to render for this iteration
+            const cellsToRender: number[] = [];
+            
+            if (bankMode) {
+                if (uneven && i === end) {
+                    cellsToRender.push(totalCells);
+                } else {
+                    for (let col = 0; col < columns; col++) {
+                        const cellNum = i + (bankOffset * col);
+                        if (cellNum <= totalCells) {
+                            cellsToRender.push(cellNum);
+                        }
+                    }
+                }
+            } else {
+                cellsToRender.push(i);
+            }
+
+            // Render each cell
+            for (const cellNum of cellsToRender) {
+                this._renderSingleCell(cells, cellNum);
+            }
+        }
+        
+        return cells;
+    }
+
+    private _renderSingleCell(cells: TemplateResult[], i: number): void {
             const v = this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '0.000');
             const r = this.getState(EntityKey[`cell_resistance_${i}`] as EntityKey, 3, '0.000');
 
@@ -722,10 +810,10 @@ export class JkBmsCoreReactorLayout extends LitElement {
             // Custom pill background if needed for highlighting min/max row?
             // For now just standard
 
-            // Progress Bar Logic
+            // Voltage-based styling
             const vParam = parseFloat(v);
-            const minLimit = 2.8; // Approximate LFP lower working voltage
-            const maxLimit = 3.65; // User specified 3.6 approx, standardized to 3.65 for LFP
+            const minLimit = this.config.minCellVoltage ?? 2.8; // Configurable or default LFP lower voltage
+            const maxLimit = this.config.maxCellVoltage ?? 3.65; // Configurable or default LFP upper voltage
             let percent = 0;
             if (!isNaN(vParam)) {
                 percent = ((vParam - minLimit) / (maxLimit - minLimit)) * 100;
@@ -733,19 +821,62 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 if (percent > 100) percent = 100;
             }
 
+            const rParam = parseFloat(r);
+            const showResistance = !isNaN(rParam) && rParam > 0;
+
+            const colorMode = this.config.cellColorMode || 'progress';
+            let cellStyle = '';
+            
+            if (colorMode === 'gradient') {
+                // 5-color gradient: dark red -> dark yellow -> dark green -> dark blue -> dark indigo
+                const colors = [
+                    { r: 180, g: 60, b: 60 },   // 0%: Dark red
+                    { r: 180, g: 180, b: 50 },  // 25%: Dark yellow
+                    { r: 60, g: 180, b: 60 },   // 50%: Dark green
+                    { r: 60, g: 120, b: 200 },  // 75%: Dark blue
+                    { r: 90, g: 60, b: 200 }    // 100%: Dark indigo
+                ];
+                
+                let colorIndex = Math.floor(percent / 25);
+                if (colorIndex >= 4) colorIndex = 3; // Cap at last transition
+                
+                const localPercent = (percent % 25) / 25; // 0-1 within current color segment
+                const color1 = colors[colorIndex];
+                const color2 = colors[colorIndex + 1];
+                
+                const red = Math.round(color1.r + (color2.r - color1.r) * localPercent);
+                const green = Math.round(color1.g + (color2.g - color1.g) * localPercent);
+                const blue = Math.round(color1.b + (color2.b - color1.b) * localPercent);
+                
+                cellStyle = `background: rgba(${red}, ${green}, ${blue}, 0.85);`;
+            }
+
+            const textBgStyle = colorMode === 'gradient' ? 'background: rgba(0, 0, 0, 0.25); padding: 1px 3px; border-radius: 3px;' : '';
+            const orientation = this.config.cellOrientation || 'horizontal';
+            const cellClass = orientation === 'vertical' ? 'cell-item cell-item-vertical' : 'cell-item';
+            
             cells.push(html`
-                <div class="cell-item">
-                    <div class="cell-item-bg" style="width: ${percent}%;"></div>
-                    <div style="display:flex; align-items:center;">
+                <div class="${cellClass}" style="${cellStyle}">
+                    ${colorMode === 'progress' ? html`<div class="cell-item-bg" style="width: ${percent}%;"></div>` : ''}
+                    ${orientation === 'vertical' ? html`
                         <span class="cell-id">${String(i).padStart(2, '0')}</span>
-                        <span class="cell-volts ${valClass} clickable"
+                        <span class="cell-volts ${valClass} clickable" style="${textBgStyle}"
                               @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>${v} V</span>
-                    </div>
-                    <span class="cell-res clickable"
-                          @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>/ ${r} Ω</span>
+                        ${showResistance ? html`
+                            <span class="cell-res clickable" style="${textBgStyle}"
+                                  @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>${r} Ω</span>
+                        ` : ''}
+                    ` : html`
+                        <span class="clickable" @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>
+                            <span class="cell-id">${String(i).padStart(2, '0')}</span>
+                            <span class="cell-volts ${valClass}" style="${textBgStyle}">${v} V</span>
+                        </span>
+                        ${showResistance ? html`
+                            <span class="cell-res clickable" style="${textBgStyle}"
+                                  @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>/ ${r} Ω</span>
+                        ` : ''}
+                    `}
                 </div>
             `);
-        }
-        return cells;
     }
 }

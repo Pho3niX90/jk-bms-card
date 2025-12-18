@@ -71,6 +71,48 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                         }
                                     }
                                 },
+                                {
+                                    name: 'deltaVoltageUnit',
+                                    selector: {
+                                        select: {
+                                            options: [
+                                                { label: 'Volts (V)', value: 'V' },
+                                                { label: 'Millivolts (mV)', value: 'mV' }
+                                            ]
+                                        }
+                                    }
+                                },
+                                { name: 'minCellVoltage', selector: { number: { min: 2.0, max: 4.0, step: 0.01, mode: 'box' } } },
+                                
+                            ],
+                        },
+                        {
+                            type: 'grid',
+                            column_min_width: '200px',
+                            schema: [
+                                {
+                                    name: 'cellColorMode',
+                                    selector: {
+                                        select: {
+                                            options: [
+                                                { label: 'Progress Bar', value: 'progress' },
+                                                { label: 'Voltage Gradient', value: 'gradient' }
+                                            ]
+                                        }
+                                    }
+                                },
+                                {
+                                    name: 'cellOrientation',
+                                    selector: {
+                                        select: {
+                                            options: [
+                                                { label: 'Vertical', value: 'vertical' },
+                                                { label: 'Horizontal', value: 'horizontal' }
+                                            ]
+                                        }
+                                    }
+                                },
+                                { name: 'maxCellVoltage', selector: { number: { min: 2.0, max: 4.0, step: 0.01, mode: 'box' } } },
                             ],
                         },
                     ],
