@@ -274,7 +274,7 @@ export class JkBmsDefaultLayout extends LitElement {
               ${localize('stats.stateOfCharge')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>${this.getState(EntityKey.state_of_charge)} %</span><br>
               ${localize('stats.remainingAmps')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>${this.getState(EntityKey.capacity_remaining)} Ah</span><br>
               ${localize('stats.cycles')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.charging_cycles)}>${this.getState(EntityKey.charging_cycles)}</span><br>
-              ${localize('stats.delta')} <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${this.maxDeltaV.toFixed(3)} V </span><br>
+              Delta ${this.config.deltaVoltageUnit || 'V'}: <span class="${deltaClass}" @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}> ${this._formatDeltaVoltage()} </span><br>
               ${localize('stats.mosfetTemp')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${this.getState(EntityKey.power_tube_temperature)} °C</span>
               ${this._renderTemps(2)}
           </div>
@@ -355,6 +355,14 @@ export class JkBmsDefaultLayout extends LitElement {
         }
 
         return html`${cells}`;
+    }
+
+    private _formatDeltaVoltage(): string {
+        const unit = this.config.deltaVoltageUnit || 'V';
+        if (unit === 'mV') {
+            return `${this.maxDeltaV.toFixed(0)} mV`;
+        }
+        return `${(this.maxDeltaV / 1000).toFixed(3)} V`;
     }
 
     private calculateDynamicMinMaxCellId(totalCells: number) {

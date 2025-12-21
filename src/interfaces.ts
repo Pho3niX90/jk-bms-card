@@ -8,5 +8,10 @@ export interface JkBmsCardConfig extends LovelaceCardConfig {
     cellColumns: number;
     cellLayout: 'incremental' | 'bankMode';
     layout?: string;
+    deltaVoltageUnit?: 'V' | 'mV';
+    cellColorMode?: 'progress' | 'gradient';
+    cellOrientation?: 'vertical' | 'horizontal';
+    minCellVoltage?: number;
+    maxCellVoltage?: number;
     entities: Record<EntityKey, string>;
 }
