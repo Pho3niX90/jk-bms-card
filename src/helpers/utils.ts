@@ -53,3 +53,25 @@ export const getState = (hass: HomeAssistant, config: JkBmsCardConfig, entityKey
 
     return state ?? defaultValue;
 }
+
+export const formatDeltaVoltage = (
+    unit: 'V' | 'mV' = 'V',
+    maxDeltaV: number | string
+): string => {
+    const valInVolts = typeof maxDeltaV === 'string'
+        ? parseFloat(maxDeltaV)
+        : maxDeltaV;
+
+    if (isNaN(valInVolts)) return '-';
+
+    if (unit === 'mV') {
+        return `${(valInVolts * 1000).toFixed(0)} mV`;
+    }
+
+    const formattedVolts = valInVolts.toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3
+    });
+
+    return `${formattedVolts} V`;
+}
