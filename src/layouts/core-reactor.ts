@@ -1,10 +1,10 @@
-import { css, html, LitElement, TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { HomeAssistant } from 'custom-card-helpers';
-import { EntityKey } from '../const';
-import { JkBmsCardConfig } from '../interfaces';
-import { globalData } from '../helpers/globals';
-import { configOrEnum, getState, navigate } from '../helpers/utils';
+import {css, html, LitElement, TemplateResult} from 'lit';
+import {customElement, property} from 'lit/decorators.js';
+import {HomeAssistant} from 'custom-card-helpers';
+import {EntityKey} from '../const';
+import {JkBmsCardConfig} from '../interfaces';
+import {globalData} from '../helpers/globals';
+import {configOrEnum, formatDeltaVoltage, getState, navigate} from '../helpers/utils';
 
 @customElement('jk-bms-core-reactor-layout')
 export class JkBmsCoreReactorLayout extends LitElement {
@@ -446,14 +446,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 // Create new array to trigger reactivity if needed, or just push
                 // For Lit reactivity on objects/arrays, purely pushing might not trigger unless we reassign or requestUpdate
                 // But efficient way is:
-                const newHistoryList = [...currentHistory, { state: val, time: time }];
+                const newHistoryList = [...currentHistory, {state: val, time: time}];
 
                 // Prune old
                 while (newHistoryList.length > 0 && newHistoryList[0].time < oneHourAgo) {
                     newHistoryList.shift();
                 }
 
-                this.historyData = { ...this.historyData, [entityId]: newHistoryList };
+                this.historyData = {...this.historyData, [entityId]: newHistoryList};
                 changed = true;
             }
         });
@@ -509,7 +509,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         })).filter(e => !isNaN(e.state));
                     }
                 });
-                this.historyData = { ...this.historyData, ...newHistory };
+                this.historyData = {...this.historyData, ...newHistory};
             }
         } catch (e) {
             console.warn("JK BMS Card: Failed to fetch history via WS", e);
@@ -710,7 +710,8 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             ${this._renderSparkline(EntityKey.delta_cell_voltage, '#41CD52')}
                             <div class="stat-label">Delta ${this.config.deltaVoltageUnit || 'V'}:</div>
                             <div class="stat-value val-green clickable"
-                                 @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}>${this._formatDeltaVoltage()}
+                                 @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}>
+                                ${formatDeltaVoltage(this.config.deltaVoltageUnit, this.maxDeltaV)}
                             </div>
                         </div>
                     </div>
@@ -725,14 +726,6 @@ export class JkBmsCoreReactorLayout extends LitElement {
         `;
     }
 
-    private _formatDeltaVoltage(): string {
-        const unit = this.config.deltaVoltageUnit || 'V';
-        if (unit === 'mV') {
-            return `${(this.maxDeltaV * 1000).toFixed(0)} mV`;
-        }
-        return `${this.maxDeltaV.toFixed(3)} V`;
-    }
-
     private calculateDynamicMinMax() {
         // Logic reused/adapted from default layout to find min/max cell for highlighting
         let minV = Infinity;
@@ -745,8 +738,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
             const vStr = this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '');
             const v = parseFloat(vStr);
             if (!isNaN(v)) {
-                if (v < minV) { minV = v; minId = String(i); }
-                if (v > maxV) { maxV = v; maxId = String(i); }
+                if (v < minV) {
+                    minV = v;
+                    minId = String(i);
+                }
+                if (v > maxV) {
+                    maxV = v;
+                    maxId = String(i);
+                }
             }
         }
 
@@ -773,7 +772,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         for (let i = 1; i <= end; i++) {
             // Determine which cells to render for this iteration
             const cellsToRender: number[] = [];
-            
+
             if (bankMode) {
                 if (uneven && i === end) {
                     cellsToRender.push(totalCells);
@@ -794,89 +793,91 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 this._renderSingleCell(cells, cellNum);
             }
         }
-        
+
         return cells;
     }
 
     private _renderSingleCell(cells: TemplateResult[], i: number): void {
-            const v = this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '0.000');
-            const r = this.getState(EntityKey[`cell_resistance_${i}`] as EntityKey, 3, '0.000');
+        const v = this.getState(EntityKey[`cell_voltage_${i}`] as EntityKey, 3, '0.000');
+        const r = this.getState(EntityKey[`cell_resistance_${i}`] as EntityKey, 3, '0.000');
 
-            // Highlight logic
-            const isMin = String(i) === this.minCellId;
-            const isMax = String(i) === this.maxCellId;
-            let valClass = isMin ? 'cell-low' : isMax ? 'cell-high' : 'val-white';
+        // Highlight logic
+        const isMin = String(i) === this.minCellId;
+        const isMax = String(i) === this.maxCellId;
+        let valClass = isMin ? 'cell-low' : isMax ? 'cell-high' : 'val-white';
 
-            // Custom pill background if needed for highlighting min/max row?
-            // For now just standard
+        // Custom pill background if needed for highlighting min/max row?
+        // For now just standard
 
-            // Voltage-based styling
-            const vParam = parseFloat(v);
-            const minLimit = this.config.minCellVoltage ?? 2.8; // Configurable or default LFP lower voltage
-            const maxLimit = this.config.maxCellVoltage ?? 3.65; // Configurable or default LFP upper voltage
-            let percent = 0;
-            if (!isNaN(vParam)) {
-                percent = ((vParam - minLimit) / (maxLimit - minLimit)) * 100;
-                if (percent < 0) percent = 0;
-                if (percent > 100) percent = 100;
-            }
+        // Voltage-based styling
+        const vParam = parseFloat(v);
+        const minLimit = this.config.minCellVoltage ?? 2.8; // Configurable or default LFP lower voltage
+        const maxLimit = this.config.maxCellVoltage ?? 3.65; // Configurable or default LFP upper voltage
+        let percent = 0;
+        if (!isNaN(vParam)) {
+            percent = ((vParam - minLimit) / (maxLimit - minLimit)) * 100;
+            if (percent < 0) percent = 0;
+            if (percent > 100) percent = 100;
+        }
 
-            const rParam = parseFloat(r);
-            const showResistance = !isNaN(rParam) && rParam > 0;
+        const rParam = parseFloat(r);
+        const showResistance = !isNaN(rParam) && rParam > 0;
 
-            const colorMode = this.config.cellColorMode || 'progress';
-            let cellStyle = '';
-            
-            if (colorMode === 'gradient') {
-                // 5-color gradient: dark red -> dark yellow -> dark green -> dark blue -> dark indigo
-                const colors = [
-                    { r: 180, g: 60, b: 60 },   // 0%: Dark red
-                    { r: 180, g: 180, b: 50 },  // 25%: Dark yellow
-                    { r: 60, g: 180, b: 60 },   // 50%: Dark green
-                    { r: 60, g: 120, b: 200 },  // 75%: Dark blue
-                    { r: 90, g: 60, b: 200 }    // 100%: Dark indigo
-                ];
-                
-                let colorIndex = Math.floor(percent / 25);
-                if (colorIndex >= 4) colorIndex = 3; // Cap at last transition
-                
-                const localPercent = (percent % 25) / 25; // 0-1 within current color segment
-                const color1 = colors[colorIndex];
-                const color2 = colors[colorIndex + 1];
-                
-                const red = Math.round(color1.r + (color2.r - color1.r) * localPercent);
-                const green = Math.round(color1.g + (color2.g - color1.g) * localPercent);
-                const blue = Math.round(color1.b + (color2.b - color1.b) * localPercent);
-                
-                cellStyle = `background: rgba(${red}, ${green}, ${blue}, 0.85);`;
-            }
+        const colorMode = this.config.cellColorMode || 'progress';
+        let cellStyle = '';
 
-            const textBgStyle = colorMode === 'gradient' ? 'background: rgba(0, 0, 0, 0.25); padding: 1px 3px; border-radius: 3px;' : '';
-            const orientation = this.config.cellOrientation || 'horizontal';
-            const cellClass = orientation === 'vertical' ? 'cell-item cell-item-vertical' : 'cell-item';
-            
-            cells.push(html`
-                <div class="${cellClass}" style="${cellStyle}">
-                    ${colorMode === 'progress' ? html`<div class="cell-item-bg" style="width: ${percent}%;"></div>` : ''}
-                    ${orientation === 'vertical' ? html`
-                        <span class="cell-id">${String(i).padStart(2, '0')}</span>
-                        <span class="cell-volts ${valClass} clickable" style="${textBgStyle}"
-                              @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>${v} V</span>
-                        ${showResistance ? html`
-                            <span class="cell-res clickable" style="${textBgStyle}"
-                                  @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>${r} Ω</span>
-                        ` : ''}
-                    ` : html`
-                        <span class="clickable" @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>
+        if (colorMode === 'gradient') {
+            // 5-color gradient: dark red -> dark yellow -> dark green -> dark blue -> dark indigo
+            const colors = [
+                {r: 180, g: 60, b: 60},   // 0%: Dark red
+                {r: 180, g: 180, b: 50},  // 25%: Dark yellow
+                {r: 60, g: 180, b: 60},   // 50%: Dark green
+                {r: 60, g: 120, b: 200},  // 75%: Dark blue
+                {r: 90, g: 60, b: 200}    // 100%: Dark indigo
+            ];
+
+            let colorIndex = Math.floor(percent / 25);
+            if (colorIndex >= 4) colorIndex = 3; // Cap at last transition
+
+            const localPercent = (percent % 25) / 25; // 0-1 within current color segment
+            const color1 = colors[colorIndex];
+            const color2 = colors[colorIndex + 1];
+
+            const red = Math.round(color1.r + (color2.r - color1.r) * localPercent);
+            const green = Math.round(color1.g + (color2.g - color1.g) * localPercent);
+            const blue = Math.round(color1.b + (color2.b - color1.b) * localPercent);
+
+            cellStyle = `background: rgba(${red}, ${green}, ${blue}, 0.85);`;
+        }
+
+        const textBgStyle = colorMode === 'gradient' ? 'background: rgba(0, 0, 0, 0.25); padding: 1px 3px; border-radius: 3px;' : '';
+        const orientation = this.config.cellOrientation || 'horizontal';
+        const cellClass = orientation === 'vertical' ? 'cell-item cell-item-vertical' : 'cell-item';
+
+        cells.push(html`
+            <div class="${cellClass}" style="${cellStyle}">
+                ${colorMode === 'progress' ? html`
+                    <div class="cell-item-bg" style="width: ${percent}%;"></div>` : ''}
+                ${orientation === 'vertical' ? html`
+                    <span class="cell-id">${String(i).padStart(2, '0')}</span>
+                    <span class="cell-volts ${valClass} clickable" style="${textBgStyle}"
+                          @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>${v} V</span>
+                    ${showResistance ? html`
+                        <span class="cell-res clickable" style="${textBgStyle}"
+                              @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>${r} Ω</span>
+                    ` : ''}
+                ` : html`
+                    <span class="clickable"
+                          @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>
                             <span class="cell-id">${String(i).padStart(2, '0')}</span>
                             <span class="cell-volts ${valClass}" style="${textBgStyle}">${v} V</span>
                         </span>
-                        ${showResistance ? html`
-                            <span class="cell-res clickable" style="${textBgStyle}"
-                                  @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>/ ${r} Ω</span>
-                        ` : ''}
-                    `}
-                </div>
-            `);
+                    ${showResistance ? html`
+                        <span class="cell-res clickable" style="${textBgStyle}"
+                              @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>/ ${r} Ω</span>
+                    ` : ''}
+                `}
+            </div>
+        `);
     }
 }
