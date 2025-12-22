@@ -1,10 +1,10 @@
-import {css, html, LitElement, TemplateResult} from 'lit';
-import {customElement, property} from 'lit/decorators.js';
-import {HomeAssistant} from 'custom-card-helpers';
-import {EntityKey} from '../const';
-import {JkBmsCardConfig} from '../interfaces';
-import {globalData} from '../helpers/globals';
-import {configOrEnum, formatDeltaVoltage, getState, navigate} from '../helpers/utils';
+import { css, html, LitElement, TemplateResult } from 'lit';
+import { customElement, property } from 'lit/decorators.js';
+import { HomeAssistant } from 'custom-card-helpers';
+import { EntityKey } from '../const';
+import { JkBmsCardConfig } from '../interfaces';
+import { globalData } from '../helpers/globals';
+import { configOrEnum, formatDeltaVoltage, getState, navigate } from '../helpers/utils';
 
 @customElement('jk-bms-core-reactor-layout')
 export class JkBmsCoreReactorLayout extends LitElement {
@@ -21,14 +21,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
     static styles = css`
         :host {
-            --primary-text-color: #e1e1e1;
-            --secondary-text-color: #9b9b9b;
             --accent-color: #41cd52;
             --accent-color-dim: rgba(65, 205, 82, 0.2);
             --discharge-color: #3090c7;
             --discharge-color-dim: rgba(48, 144, 199, 0.2);
-            --panel-bg: rgba(255, 255, 255, 0.05);
-            --panel-border: 1px solid rgba(255, 255, 255, 0.1);
+            --panel-bg: var(--secondary-background-color, rgba(255, 255, 255, 0.05));
+            --panel-border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
         }
 
         .container {
@@ -36,7 +34,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             color: var(--primary-text-color);
             padding: 8px;
             box-sizing: border-box;
-            background: #1c1c1c; /* Fallback/Base dark */
+            background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
             border-radius: var(--ha-card-border-radius, 12px);
         }
 
@@ -78,7 +76,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             align-items: center;
             justify-content: center;
             margin-bottom: 4px;
-            background: #2a2a2a;
+            background: var(--secondary-background-color, #2a2a2a);
         }
 
         .icon-circle ha-icon {
@@ -172,7 +170,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .val-white {
-            color: #fff;
+            color: var(--primary-text-color);
         }
 
         .val-green {
@@ -227,7 +225,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .cell-item {
-            background: #2a2a2a;
+            background: var(--secondary-background-color, #2a2a2a);
             border-radius: 8px;
             padding: 4px 6px;
             display: flex;
@@ -277,13 +275,13 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .cell-volts {
-            color: #e1e1e1;
+            color: var(--primary-text-color);
             font-family: monospace;
             font-size: 0.9em;
         }
 
         .cell-res {
-            color: #90a4ae;
+            color: var(--secondary-text-color);
             font-size: 0.8em;
             font-family: monospace;
         }
@@ -304,7 +302,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .status-off {
-            color: #666;
+            color: var(--disabled-text-color, #666);
             font-weight: bold;
         }
 
@@ -446,14 +444,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 // Create new array to trigger reactivity if needed, or just push
                 // For Lit reactivity on objects/arrays, purely pushing might not trigger unless we reassign or requestUpdate
                 // But efficient way is:
-                const newHistoryList = [...currentHistory, {state: val, time: time}];
+                const newHistoryList = [...currentHistory, { state: val, time: time }];
 
                 // Prune old
                 while (newHistoryList.length > 0 && newHistoryList[0].time < oneHourAgo) {
                     newHistoryList.shift();
                 }
 
-                this.historyData = {...this.historyData, [entityId]: newHistoryList};
+                this.historyData = { ...this.historyData, [entityId]: newHistoryList };
                 changed = true;
             }
         });
@@ -509,7 +507,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         })).filter(e => !isNaN(e.state));
                     }
                 });
-                this.historyData = {...this.historyData, ...newHistory};
+                this.historyData = { ...this.historyData, ...newHistory };
             }
         } catch (e) {
             console.warn("JK BMS Card: Failed to fetch history via WS", e);
@@ -829,11 +827,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
         if (colorMode === 'gradient') {
             // 5-color gradient: dark red -> dark yellow -> dark green -> dark blue -> dark indigo
             const colors = [
-                {r: 180, g: 60, b: 60},   // 0%: Dark red
-                {r: 180, g: 180, b: 50},  // 25%: Dark yellow
-                {r: 60, g: 180, b: 60},   // 50%: Dark green
-                {r: 60, g: 120, b: 200},  // 75%: Dark blue
-                {r: 90, g: 60, b: 200}    // 100%: Dark indigo
+                { r: 180, g: 60, b: 60 },   // 0%: Dark red
+                { r: 180, g: 180, b: 50 },  // 25%: Dark yellow
+                { r: 60, g: 180, b: 60 },   // 50%: Dark green
+                { r: 60, g: 120, b: 200 },  // 75%: Dark blue
+                { r: 90, g: 60, b: 200 }    // 100%: Dark indigo
             ];
 
             let colorIndex = Math.floor(percent / 25);
