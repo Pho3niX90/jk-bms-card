@@ -24,7 +24,14 @@ export function localize(string: string, search = '', replace = '') {
       .replace(/['"]+/g, '')
       .replace('-', '_');
 
+    console.log("globalData.hass?.selectedLanguage" + globalData.hass?.selectedLanguage);
+    console.log("globalData.hass?.locale?.language" + globalData.hass?.locale?.language);
+    console.log("globalData.hass?.language" + globalData.hass?.language);
+    console.log("langFromLocalStorage" + langFromLocalStorage);
+
     const lang = `${globalData.hass?.selectedLanguage || globalData.hass?.locale?.language || globalData.hass?.language || langFromLocalStorage}`;
+
+    console.log("lang" + lang);
 
     let translated: string;
 
