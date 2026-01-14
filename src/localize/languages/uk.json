@@ -1,0 +1,45 @@
+{
+  "common": {
+    "title": "Карта JK BMS",
+    "description": "Налаштовувана картка Home Assistant для емуляції екрану JK BMS",
+    "version": "Версія"
+  },
+  "config": {
+    "title": "Заголовок",
+    "prefix": "Префікс сенсорів",
+    "cellCount": "Кількість комірок",
+    "cellColumns": "Кількість стовпців",
+    "cellLayout": "Розташування комірок",
+    "layout": "Макет",
+    "deltaVoltageUnit": "Одиниця дельта напруги",
+    "cellColorMode": "Режим кольору комірок",
+    "cellOrientation": "Орієнтація комірок",
+    "minCellVoltage": "Мін. напруга комірки (В)",
+    "maxCellVoltage": "Макс. напруга комірки (В)",
+    "manualAssignment": "Ручне призначення сутності",
+    "tempSensorsCount": "Кількість доступних датчиків температури",
+    "hasHeater": "Використовується опція підігріву"
+  },
+  "switches": {
+    "charge": "Заряд",
+    "discharge": "Розряд",
+    "balance": "Баланс",
+    "heater": "Підігрів"
+  },
+  "stats": {
+    "power": "Потужність:",
+    "capacity": "Ємність:",
+    "cycleCapacity": "Ємність циклу:",
+    "averageCellV": "Середня напруга комірки:",
+    "balanceCurrent": "Струм балансування:",
+    "stateOfCharge": "Заряд:",
+    "remainingAmps": "Залишок (Аг):",
+    "cycles": "Цикли:",
+    "delta": "Дельта напруги:",
+    "mosfetTemp": "Температура MOS:",
+    "temperature_sensor_1": "Темп. 1:",
+    "temperature_sensor_2": "Темп. 2:",
+    "temperature_sensor_3": "Темп. 3:",
+    "temperature_sensor_4": "Темп. 4:"
+  }
+}
