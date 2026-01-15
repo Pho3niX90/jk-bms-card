@@ -400,7 +400,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         this._historyInterval = window.setInterval(() => this.fetchHistory(), 60000); // Update every minute
     }
 
-    private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" = "sensor") {
+    private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor") {
         navigate(event, this.config, entityId, type);
     }
 
@@ -471,7 +471,13 @@ export class JkBmsCoreReactorLayout extends LitElement {
             this._resolveEntityId(EntityKey.total_voltage),
             this._resolveEntityId(EntityKey.current),
             this._resolveEntityId(EntityKey.power_tube_temperature),
-            this._resolveEntityId(EntityKey.delta_cell_voltage)
+            this._resolveEntityId(EntityKey.delta_cell_voltage),
+            this._resolveEntityId(EntityKey.temperature_sensor_1),
+            this._resolveEntityId(EntityKey.temperature_sensor_2),
+            this._resolveEntityId(EntityKey.temperature_sensor_3),
+            this._resolveEntityId(EntityKey.temperature_sensor_4),
+            this._resolveEntityId(EntityKey.balancing),
+            this._resolveEntityId(EntityKey.balancing_current),
         ].filter(e => e);
 
         // Deduplicate
@@ -580,7 +586,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         `;
     }
 
-    private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
+    private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor"): string {
         return getState(this.hass, this.config, entityKey, precision, defaultValue, type);
     }
 
@@ -588,7 +594,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         globalData.hass = this.hass;
         if (!this.hass || !this.config) return html``;
 
-        const title = this.config.title || 'Bat 1';
+        const title = this.config.title || html`Bat 1 - Capacity: <b> ${this.getState(EntityKey.total_battery_capacity_setting)} Ah</b>`;
         const runtime = this.getState(EntityKey.total_runtime_formatted);
         const header = runtime && runtime != "unknown" ? html` | Time: <b>${runtime.toUpperCase()}</b>` : '';
 
@@ -601,6 +607,9 @@ export class JkBmsCoreReactorLayout extends LitElement {
         const isDischargingFlow = current < 0;
         const isCharging = this.getState(EntityKey.charging, 0, '', 'switch') === 'on';
         const isDischarging = this.getState(EntityKey.discharging, 0, '', 'switch') === 'on';
+
+        const isBalancing = this.getState(EntityKey.balancing, 0, '', 'binary_sensor') === 'on';
+        const balancingCurrent = parseFloat(this.getState(EntityKey.balancing_current));
 
         // Stats
         const soc = this.getState(EntityKey.state_of_charge);
@@ -713,7 +722,94 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             </div>
                         </div>
                     </div>
+
+                    <!-- Temp 1 & 2 -->
+                    <div class="stats-panel">
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_1, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    <svg style="position:absolute; inset:0; opacity:0.25; pointer-events:none;">
+                                        <!-- Opțional: poți adăuga un fundal colorat slab -->
+                                    </svg>
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_1, color)}
+                                    <div class="stat-label">Temp 1</div>
+                                    <div class="stat-value clickable" style="color: ${color};" 
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_1)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_2, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_2, color)}
+                                    <div class="stat-label">Temp 2</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_2)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                    </div>
+
+                    <!-- Temp 3 & 4 -->
+                    <div class="stats-panel">
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_3, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_3, color)}
+                                    <div class="stat-label">Temp 3</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_3)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_4, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_4, color)}
+                                    <div class="stat-label">Temp 4</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_4)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                    </div>
+
+                    <!-- Balancing status - vizibil DOAR când e activ -->
+                    ${isBalancing ? html`
+                        <div class="stats-panel" style="grid-column: 1 / -1;">
+                            <div class="metric-group">
+                                ${this._renderSparkline(EntityKey.balancing_current || 'balancing_current', '#41cd52')}  
+                                <div class="stat-label">Balancing</div>
+                                <div class="stat-value val-green clickable"
+                                    @click=${(e) => this._navigate(e, EntityKey.balancing_current, 'sensor')}>
+                                    ${balancingCurrent.toFixed(2)} A
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
+                
+                
 
                 <!-- Cells -->
                 <div class="cell-grid grid-${this.config.cellColumns ?? 2}">
@@ -756,6 +852,52 @@ export class JkBmsCoreReactorLayout extends LitElement {
             this.maxCellId = maxId;
             this.maxDeltaV = parseFloat((maxV - minV).toFixed(3));
         }
+    }
+
+    private getTemperatureColor(temp: number): string {
+        // Limite configurabile – ajustează după nevoile tale (ex. pentru baterie JK-BMS)
+        const cold = 5;     // sub asta → albastru rece / îngheț
+        const optimalLow = 15;
+        const optimalHigh = 35;
+        const hot = 45;     // peste asta → roșu intens / alarmă
+
+        // Culori de referință (hex)
+        const colors = [
+            { temp: -10, color: '#0000FF' },   // deep blue (foarte rece)
+            { temp: 0,   color: '#00BFFF' },   // light blue / cyan rece
+            { temp: 20,  color: '#41CD52' },   // lime green (optim)
+            { temp: 30,  color: '#FFD700' },   // gold/yellow
+            { temp: 40,  color: '#FF8C00' },   // orange
+            { temp: 50,  color: '#FF4500' },   // orangered
+            { temp: 60,  color: '#DC143C' },   // crimson (prea fierbinte)
+        ];
+
+        // Găsește intervalul și interpolează
+        for (let i = 0; i < colors.length - 1; i++) {
+            const curr = colors[i];
+            const next = colors[i + 1];
+
+            if (temp <= curr.temp) return curr.color;
+            if (temp >= next.temp) continue;
+
+            // Interpolare liniară între curr și next
+            const ratio = (temp - curr.temp) / (next.temp - curr.temp);
+            const r1 = parseInt(curr.color.slice(1,3), 16);
+            const g1 = parseInt(curr.color.slice(3,5), 16);
+            const b1 = parseInt(curr.color.slice(5,7), 16);
+            const r2 = parseInt(next.color.slice(1,3), 16);
+            const g2 = parseInt(next.color.slice(3,5), 16);
+            const b2 = parseInt(next.color.slice(5,7), 16);
+
+            const r = Math.round(r1 + ratio * (r2 - r1));
+            const g = Math.round(g1 + ratio * (g2 - g1));
+            const b = Math.round(b1 + ratio * (b2 - b1));
+
+            return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+        }
+
+        // Dacă e peste maxim → ultimul color (roșu intens)
+        return colors[colors.length - 1].color;
     }
 
     private _renderCells(): TemplateResult[] {
