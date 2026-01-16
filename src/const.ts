@@ -25,6 +25,8 @@ export enum EntityKey {
     min_voltage_cell ='min_voltage_cell',
     max_voltage_cell ='max_voltage_cell',
     errors ='errors',
+    software_version ='software_version',
+    hardware_version ='hardware_version',
 
     cell_voltage_1 ='cell_voltage_1',
     cell_voltage_2 ='cell_voltage_2',

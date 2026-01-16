@@ -267,7 +267,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             color: #e4f3f8;
             border-radius: 999px;
             font-weight: 500;
-            font-size: 0.7em;
+            font-size: 1em;
             min-width: 1.4rem;
             text-align: center;
             margin-right: 3px;
@@ -277,12 +277,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
         .cell-volts {
             color: var(--primary-text-color);
             font-family: monospace;
-            font-size: 0.9em;
+            font-size: 1.2em;
         }
 
         .cell-res {
             color: var(--secondary-text-color);
-            font-size: 0.8em;
+            font-size: 1em;
             font-family: monospace;
         }
 
@@ -476,7 +476,6 @@ export class JkBmsCoreReactorLayout extends LitElement {
             this._resolveEntityId(EntityKey.temperature_sensor_2),
             this._resolveEntityId(EntityKey.temperature_sensor_3),
             this._resolveEntityId(EntityKey.temperature_sensor_4),
-            this._resolveEntityId(EntityKey.balancing),
             this._resolveEntityId(EntityKey.balancing_current),
         ].filter(e => e);
 
@@ -594,9 +593,13 @@ export class JkBmsCoreReactorLayout extends LitElement {
         globalData.hass = this.hass;
         if (!this.hass || !this.config) return html``;
 
-        const title = this.config.title || html`Bat 1 - Capacity: <b> ${this.getState(EntityKey.total_battery_capacity_setting)} Ah</b>`;
+        const hardwareVersion = this.getState(EntityKey.hardware_version);
+        const softwareVersion = this.getState(EntityKey.software_version);
+        const title = this.config.title || html`Bat 1 - Capacity: <b> ${this.getState(EntityKey.total_battery_capacity_setting)} Ah</b></br>
+        HW: <b>${hardwareVersion}</b> | SW: <b>${softwareVersion}</b>`;
+
         const runtime = this.getState(EntityKey.total_runtime_formatted);
-        const header = runtime && runtime != "unknown" ? html` | Time: <b>${runtime.toUpperCase()}</b>` : '';
+        const header = runtime && runtime != "unknown" ? html`</br>Time: <b>${runtime.toUpperCase()}</b>` : '';
 
         const current = parseFloat(this.getState(EntityKey.current));
 
@@ -622,8 +625,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         return html`
             <ha-card class="container">
+                <div class="header clickable" @click=${(e) => this._navigate(e, EntityKey.software_version)}>
+                    ${title}
+                </div>
                 <div class="header clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
-                    ${title} ${header}
+                    ${header}
                 </div>
 
                 <div class="top-section">
@@ -631,7 +637,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="flow-node">
                         <div class="icon-circle clickable"
                              @click=${(e) => this._navigate(e, EntityKey.charging, 'switch')}>
-                            <ha-icon icon="mdi:solar-power"></ha-icon>
+                            <ha-icon icon="mdi:solar-power" style="color: ${isChargingFlow ? 'var(--accent-color)' : '#444'};"></ha-icon>
                         </div>
                         <div class="node-label">Grid/Solar</div>
                         <div class="node-status">
@@ -657,7 +663,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="flow-node">
                         <div class="icon-circle clickable"
                              @click=${(e) => this._navigate(e, EntityKey.discharging, 'switch')}>
-                            <ha-icon icon="mdi:power-plug"></ha-icon>
+                            <ha-icon icon="mdi:power-plug" style="color: ${isDischargingFlow ? 'var(--discharge-color)' : '#444'};"></ha-icon>
                         </div>
                         <div class="node-label">Load</div>
                         <div class="node-status">
@@ -732,7 +738,6 @@ export class JkBmsCoreReactorLayout extends LitElement {
                                 const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
                                 return html`
                                     <svg style="position:absolute; inset:0; opacity:0.25; pointer-events:none;">
-                                        <!-- Opțional: poți adăuga un fundal colorat slab -->
                                     </svg>
                                     ${this._renderSparkline(EntityKey.temperature_sensor_1, color)}
                                     <div class="stat-label">Temp 1</div>
