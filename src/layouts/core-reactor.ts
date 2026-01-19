@@ -599,9 +599,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
         HW: <b>${hardwareVersion}</b> | SW: <b>${softwareVersion}</b>`;
 
         const runtime = this.getState(EntityKey.total_runtime_formatted);
-        const header = runtime && runtime != "unknown" ? html`</br>Time: <b>${runtime.toUpperCase()}</b>` : '';
+        const header = runtime && runtime != "unknown" ? html`Time: <b>${runtime.toUpperCase()}</b>` : '';
 
         const current = parseFloat(this.getState(EntityKey.current));
+        const charging_power = this.getState(EntityKey.charging_power);
+        const discharging_power = this.getState(EntityKey.discharging_power);
 
         // Flow Logic: 
         // Charge (Grid -> SOC) when current > 0
@@ -617,7 +619,6 @@ export class JkBmsCoreReactorLayout extends LitElement {
         // Stats
         const soc = this.getState(EntityKey.state_of_charge);
         const capacityVal = this.getState(EntityKey.total_battery_capacity_setting);
-        // const current = parseFloat(this.getState(EntityKey.current)); // Already fetched above
         const totalVolts = this.getState(EntityKey.total_voltage);
         const mosTemp = this.getState(EntityKey.power_tube_temperature);
 
@@ -644,6 +645,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             Charge: <span
                                 class="${isCharging ? 'status-on' : 'status-off'}">${isCharging ? 'ON' : 'OFF'}</span>
                         </div>
+                        <div class="node-status">
+                            <div class="stat-value val-white clickable"
+                                 @click=${(e) => this._navigate(e, EntityKey.charging_power)}>${charging_power} W
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Reactor (SOC) -->
@@ -669,6 +675,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         <div class="node-status">
                             Discharge: <span
                                 class="${isDischarging ? 'status-on' : 'status-off'}">${isDischarging ? 'ON' : 'OFF'}</span>
+                        </div>
+                        
+                        <div class="node-status">
+                            <div class="stat-value val-white clickable"
+                                 @click=${(e) => this._navigate(e, EntityKey.discharging_power)}>${discharging_power} W
+                            </div>
                         </div>
                     </div>
 
@@ -702,7 +714,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         </div>
 
                         <div class="metric-group">
-                            ${this._renderSparkline(EntityKey.current, '#3090c7')}
+                            ${this._renderSparkline(EntityKey.current, '#3090c7' )}
                             <div class="stat-label">Current:</div>
                             <div class="stat-value val-white clickable"
                                  @click=${(e) => this._navigate(e, EntityKey.current)}>${current} A
@@ -728,7 +740,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             </div>
                         </div>
                     </div>
-
+                    
                     <!-- Temp 1 & 2 -->
                     <div class="stats-panel">
                         <div class="metric-group">
