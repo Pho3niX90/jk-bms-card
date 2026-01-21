@@ -43,6 +43,31 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                 },
                 {
                     type: 'grid',
+                    title: localize('config.language'),
+                    schema: [
+                        {
+                        type: 'grid',
+                        schema: [
+                            {
+                            name: 'language',
+                            selector: {
+                                select: {
+                                options: [
+                                    { label: 'Auto (follow HA)', value: '' },
+                                    { label: 'English',          value: 'en' },
+                                    { label: 'Română',           value: 'ro' },
+                                    { label: 'Українська',       value: 'uk' },
+                                ],
+                                mode: 'dropdown',
+                                }
+                            }
+                            },
+                        ],
+                        },
+                    ],
+                    },
+                {
+                    type: 'grid',
                     title: localize('config.prefix'),
                     schema: [
                         {

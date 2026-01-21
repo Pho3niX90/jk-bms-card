@@ -28,10 +28,12 @@ export class JkBmsCard extends LitElement {
     public setConfig(config: JkBmsCardConfig): void {
         this._config = JkBmsCard.getStubConfig();
         this._config = { ...this._config, ...config };
+        globalData.cardConfig = this._config;
     }
 
     static getStubConfig() {
         return {
+            language: '',
             title: localize("title"),
             prefix: "jk_bms",
             cellCount: 16,

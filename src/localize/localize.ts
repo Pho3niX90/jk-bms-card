@@ -1,10 +1,12 @@
 import * as en from './languages/en.json';
 import * as uk from './languages/uk.json';
+import * as ro from './languages/ro.json';
 import { globalData } from '../helpers/globals';
 
 const languages: any = {
   en: en,
   uk: uk,
+  ro: ro,
 };
 
 export function localize(string: string, search = '', replace = '') {
@@ -13,6 +15,9 @@ export function localize(string: string, search = '', replace = '') {
     // localStorage.getItem('assist_debug_language') == "\"uk\"" // Ukraine, its ok.
     // localStorage.getItem('editor-language') == "ru" // but the system is set to Ukrainian, WTF?
     //
+    
+    let forcedLang = (globalData as { cardConfig?: { language?: string } }).cardConfig?.language;
+
     let langFromLocalStorage = localStorage.getItem('selectedLanguage');
     if (langFromLocalStorage === null)
       langFromLocalStorage = localStorage.getItem('assist_debug_language');
@@ -24,7 +29,11 @@ export function localize(string: string, search = '', replace = '') {
       .replace(/['"]+/g, '')
       .replace('-', '_');
 
-    const lang = `${globalData.hass?.selectedLanguage || globalData.hass?.locale?.language || globalData.hass?.language || langFromLocalStorage}`;
+    const lang = forcedLang ||
+                 globalData.hass?.selectedLanguage ||
+                 globalData.hass?.locale?.language ||
+                 globalData.hass?.language ||
+                 langFromLocalStorage;
 
     let translated: string;
 

@@ -3,12 +3,15 @@ export const MAIN_NAME = 'jk-bms-card';
 
 export enum EntityKey {
     delta_cell_voltage ='delta_cell_voltage',
+    balancing ='balancing',
     balancing_current ='balancing_current',
     power ='power',
     balance_trigger_voltage ='balance_trigger_voltage',
     total_runtime_formatted ='total_runtime_formatted',
     charging ='charging',
+    charging_power ='charging_power',
     discharging ='discharging',
+    discharging_power ='discharging_power',
     balancer ='balancer',
     heater ='heater',
     total_voltage ='total_voltage',
@@ -24,6 +27,8 @@ export enum EntityKey {
     min_voltage_cell ='min_voltage_cell',
     max_voltage_cell ='max_voltage_cell',
     errors ='errors',
+    software_version ='software_version',
+    hardware_version ='hardware_version',
 
     cell_voltage_1 ='cell_voltage_1',
     cell_voltage_2 ='cell_voltage_2',
