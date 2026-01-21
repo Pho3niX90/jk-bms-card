@@ -41,5 +41,21 @@
     "temperature_sensor_2": "Темп. 2:",
     "temperature_sensor_3": "Темп. 3:",
     "temperature_sensor_4": "Темп. 4:"
+  },
+  "html_texts": {
+    "capacity": "Ємність",
+    "time": "Час",
+    "grid-solar": "Мережа/Сонячна",
+    "load": "Навантаження",
+    "total-voltage": "Загальна напруга",
+    "current": "Струм",
+    "mosfetTemp": "Темп. MOS",
+    "delta": "Дельта",
+    "temperature_sensor": "Темп",
+    "balancing": "Балансування",
+    "volt": "В",
+    "charge": "Заряд",
+    "discharge": "Розряд",
+    "remaining": "Залишок"
   }
 }

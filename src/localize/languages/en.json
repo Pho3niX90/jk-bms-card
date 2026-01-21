@@ -41,5 +41,21 @@
     "temperature_sensor_2": "Temp. 2:",
     "temperature_sensor_3": "Temp. 3:",
     "temperature_sensor_4": "Temp. 4:"
+  },
+  "html_texts": {
+    "capacity": "Capacity",
+    "time": "Time",
+    "grid-solar": "Grid/Solar",
+    "load": "Load",
+    "total-voltage": "Total Voltage",
+    "current": "Current",
+    "mosfetTemp": "MOS Temp",
+    "delta": "Delta",
+    "temperature_sensor": "Temp",
+    "balancing": "Balancing",
+    "volt": "V",
+    "charge": "Charge",
+    "discharge": "Discharge",
+    "remaining": "Remaining"
   }
 }

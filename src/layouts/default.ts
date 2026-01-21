@@ -235,7 +235,7 @@ export class JkBmsDefaultLayout extends LitElement {
         const deltaClass = this.shouldBalance ? 'delta-needs-balancing' : 'delta-ok';
 
         const runtime = this.getState(EntityKey.total_runtime_formatted);
-        const header = runtime && runtime != "unknown" ? html` | Time: <b><font color="#3090C7">${runtime.toUpperCase()}</font></b>` : ''
+        const header = runtime && runtime != "unknown" ? html` | ${localize('html_texts.time')}: <b><font color="#3090C7">${runtime.toUpperCase()}</font></b>` : ''
 
         return html`
       <ha-card>
@@ -257,12 +257,12 @@ export class JkBmsDefaultLayout extends LitElement {
         <div class="grid grid-2 section-padding">
           <div class="stats-padding stats-border">
             <div class="clickable center" @click=${(e) => this._navigate(e, EntityKey.total_voltage)}>
-              <b><font color="#41CD52" size="6">${this.getState(EntityKey.total_voltage)} V</font></b>
+              <b><font color="#41CD52" size="6">${this.getState(EntityKey.total_voltage)} ${localize('html_texts.volt')}</font></b>
             </div>
               ${localize('stats.power')} <span class="clickable ${powerClass}" @click=${(e) => this._navigate(e, EntityKey.power)}>${this.getState(EntityKey.power)} W</span><br>
               ${localize('stats.capacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.total_battery_capacity_setting)}>${this.getState(EntityKey.total_battery_capacity_setting)} Ah</span><br>
               ${localize('stats.cycleCapacity')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.total_charging_cycle_capacity)}>${this.getState(EntityKey.total_charging_cycle_capacity)} Ah</span><br>
-              ${localize('stats.averageCellV')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.average_cell_voltage)}>${this.getState(EntityKey.average_cell_voltage, 3)} V</span><br>
+              ${localize('stats.averageCellV')} <span class="clickable" @click=${(e) => this._navigate(e, EntityKey.average_cell_voltage)}>${this.getState(EntityKey.average_cell_voltage, 3)} ${localize('html_texts.volt')}</span><br>
               ${localize('stats.balanceCurrent')} <span class="${balanceClass}">${balanceCurrent.toFixed(1)} A</span>
               ${this._renderTemps(1)}
           </div>
@@ -404,7 +404,7 @@ export class JkBmsDefaultLayout extends LitElement {
             <div class="center cell-container" id="cell-${i}">
             <span class="clickable" @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`],)}>
                 <span class="pill">${i.toString().padStart(2, '0')}</span>
-            ${color ? html`<span class="${color}">${voltage} V</span>` : html`${voltage} V`}
+            ${color ? html`<span class="${color}">${voltage} ${localize('html_texts.volt')}</span>` : html`${voltage} ${localize('html_texts.volt')}`}
           </span>
                 ${resistanceHtml}
             </div>
