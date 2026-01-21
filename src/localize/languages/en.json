@@ -5,6 +5,7 @@
     "version": "Version"
   },
   "config": {
+    "language": "Language",
     "title": "Title",
     "prefix": "Prefix of the sensors",
     "cellCount": "Number of cells",

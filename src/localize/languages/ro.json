@@ -5,6 +5,7 @@
     "version": "Versiune"
   },
   "config": {
+    "language": "Limba",
     "title": "Titlu",
     "prefix": "Prefixul senzorilor",
     "cellCount": "Număr de celule",
