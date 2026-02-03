@@ -130,6 +130,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             font-size: 0.85em;
             color: var(--secondary-text-color);
             margin-top: -4px;
+            text-align: center;
         }
 
         /* Middle Grid */
@@ -658,10 +659,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
                              @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>
                             <div class="soc-label">SoC:</div>
                             <div class="soc-value">${soc}%</div>
-                            <div class="capacity-val clickable"
-                                 @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>
-                                ${localize('html_texts.remaining')}:<br>${this.getState(EntityKey.capacity_remaining)} Ah
-                            </div>
+                            ${isBalancing ? 
+                                    html`<div class="capacity-val clickable"
+                                            @click=${(e) => this._navigate(e, EntityKey.balancing_current)}>
+                                                ${localize('html_texts.balancing')}:<br>${this.getState(EntityKey.balancing_current)} A</div>` : 
+                                    html`<div class="capacity-val clickable"
+                                            @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>
+                                                ${localize('html_texts.remaining')}:<br>${this.getState(EntityKey.capacity_remaining)} Ah</div>`
+                                }
                         </div>
                     </div>
 
@@ -810,23 +815,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             })()}
                         </div>
                     </div>
-
-                    <!-- Balancing status - vizibil DOAR când e activ -->
-                    ${isBalancing ? html`
-                        <div class="stats-panel" style="grid-column: 1 / -1;">
-                            <div class="metric-group">
-                                ${this._renderSparkline(EntityKey.balancing_current || 'balancing_current', '#41cd52')}  
-                                <div class="stat-label">${localize('html_texts.balancing')}</div>
-                                <div class="stat-value val-green clickable"
-                                    @click=${(e) => this._navigate(e, EntityKey.balancing_current, 'sensor')}>
-                                    ${balancingCurrent.toFixed(2)} A
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
                 </div>
-                
-                
 
                 <!-- Cells -->
                 <div class="cell-grid grid-${this.config.cellColumns ?? 2}">
