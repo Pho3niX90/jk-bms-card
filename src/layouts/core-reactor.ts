@@ -28,6 +28,8 @@ export class JkBmsCoreReactorLayout extends LitElement {
             --discharge-color-dim: rgba(48, 144, 199, 0.2);
             --panel-bg: var(--secondary-background-color, rgba(255, 255, 255, 0.05));
             --panel-border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+            --solar-color: #ffd30f;
+            --balancing-color: #ff6333;
         }
 
         .container {
@@ -106,13 +108,20 @@ export class JkBmsCoreReactorLayout extends LitElement {
             width: 140px;
             height: 140px;
             border-radius: 50%;
-            border: 6px solid var(--accent-color);
             box-shadow: 0 0 15px var(--accent-color-dim);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             background: radial-gradient(circle, rgba(65, 205, 82, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+        }
+
+        .reactor-ring-base {
+            border: 6px solid var(--accent-color);
+        }
+        
+        .reactor-ring-balancing {
+            border: 6px solid var(--balancing-color);
         }
 
         .soc-label {
@@ -128,9 +137,16 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         .capacity-val {
             font-size: 0.85em;
-            color: var(--secondary-text-color);
             margin-top: -4px;
             text-align: center;
+        }
+
+        .capacity-val-base {
+            color: var(--secondary-text-color);
+        }
+
+        .capacity-val-balancing {
+            color: var(--balancing-color);
         }
 
         /* Middle Grid */
@@ -332,7 +348,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .path-charge {
-            stroke: var(--accent-color);
+            stroke: var(--solar-color);
         }
 
         .path-discharge {
@@ -639,7 +655,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="flow-node">
                         <div class="icon-circle clickable"
                              @click=${(e) => this._navigate(e, EntityKey.charging, 'switch')}>
-                            <ha-icon icon="mdi:solar-power" style="color: ${isChargingFlow ? 'var(--accent-color)' : '#444'};"></ha-icon>
+                            <ha-icon icon="mdi:solar-power" style="color: ${isChargingFlow ? 'var(--solar-color)' : '#444'};"></ha-icon>
                         </div>
                         <div class="node-label">${localize('html_texts.grid-solar')}</div>
                         <div class="node-status">
@@ -655,15 +671,15 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
                     <!-- Reactor (SOC) -->
                     <div class="reactor-container">
-                        <div class="reactor-ring clickable"
+                        <div class="reactor-ring ${isBalancing ? "reactor-ring-balancing" : "reactor-ring-base"} clickable" 
                              @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>
                             <div class="soc-label">SoC:</div>
                             <div class="soc-value">${soc}%</div>
                             ${isBalancing ? 
-                                    html`<div class="capacity-val clickable"
+                                    html`<div class="capacity-val capacity-val-balancing clickable"
                                             @click=${(e) => this._navigate(e, EntityKey.balancing_current)}>
                                                 ${localize('html_texts.balancing')}:<br>${this.getState(EntityKey.balancing_current)} A</div>` : 
-                                    html`<div class="capacity-val clickable"
+                                    html`<div class="capacity-val capacity-val-base clickable"
                                             @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>
                                                 ${localize('html_texts.remaining')}:<br>${this.getState(EntityKey.capacity_remaining)} Ah</div>`
                                 }
