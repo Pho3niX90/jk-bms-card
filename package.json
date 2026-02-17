@@ -1,6 +1,6 @@
 {
   "name": "jk-bms-card",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "A customizable Home Assistant card to emulate the JK BMS screen.",
   "main": "jk-bms-card.js",
   "scripts": {
