@@ -22,7 +22,7 @@ export const configOrEnum = (config: JkBmsCardConfig, entityId: EntityKey) => {
     return configValue && configValue.length > 1 ? configValue : entityId?.toString();
 }
 
-export const navigate = (event, config: JkBmsCardConfig, entityId: EntityKey, type: "sensor" | "switch" | "number" = "sensor") => {
+export const navigate = (event, config: JkBmsCardConfig, entityId: EntityKey, type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor") => {
     if (!event) {
         return;
     }
@@ -30,7 +30,7 @@ export const navigate = (event, config: JkBmsCardConfig, entityId: EntityKey, ty
     event.stopPropagation();
 
     const configValue = configOrEnum(config, entityId);
-    const fullEntityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : type + "." + config?.prefix + "_" + configValue;
+    const fullEntityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') || configValue.includes('binary_sensor.') ? configValue : type + "." + config?.prefix + "_" + configValue;
     let customEvent = new CustomEvent('hass-more-info', {
         detail: {entityId: fullEntityId},
         composed: true,
@@ -38,12 +38,12 @@ export const navigate = (event, config: JkBmsCardConfig, entityId: EntityKey, ty
     event.target.dispatchEvent(customEvent);
 }
 
-export const getState = (hass: HomeAssistant, config: JkBmsCardConfig, entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string => {
+export const getState = (hass: HomeAssistant, config: JkBmsCardConfig, entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor"): string => {
     const configValue = configOrEnum(config, entityKey)
     if (!configValue)
         return defaultValue;
 
-    const entityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') ? configValue : `${type}.${config!.prefix}_${configValue}`;
+    const entityId = configValue.includes('sensor.') || configValue.includes('switch.') || configValue.includes('number.') || configValue.includes('binary_sensor.') ? configValue : `${type}.${config!.prefix}_${configValue}`;
     const entity = hass?.states[entityId];
     const state = entity?.state;
     const stateNumeric = Number(state);

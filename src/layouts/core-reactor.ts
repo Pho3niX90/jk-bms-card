@@ -5,6 +5,7 @@ import { EntityKey } from '../const';
 import { JkBmsCardConfig } from '../interfaces';
 import { globalData } from '../helpers/globals';
 import { configOrEnum, formatDeltaVoltage, getState, navigate } from '../helpers/utils';
+import { localize } from '../localize/localize';
 
 @customElement('jk-bms-core-reactor-layout')
 export class JkBmsCoreReactorLayout extends LitElement {
@@ -27,6 +28,8 @@ export class JkBmsCoreReactorLayout extends LitElement {
             --discharge-color-dim: rgba(48, 144, 199, 0.2);
             --panel-bg: var(--secondary-background-color, rgba(255, 255, 255, 0.05));
             --panel-border: 1px solid var(--divider-color, rgba(255, 255, 255, 0.1));
+            --solar-color: #ffd30f;
+            --balancing-color: #ff6333;
         }
 
         .container {
@@ -105,13 +108,20 @@ export class JkBmsCoreReactorLayout extends LitElement {
             width: 140px;
             height: 140px;
             border-radius: 50%;
-            border: 6px solid var(--accent-color);
             box-shadow: 0 0 15px var(--accent-color-dim);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             background: radial-gradient(circle, rgba(65, 205, 82, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+        }
+
+        .reactor-ring-base {
+            border: 6px solid var(--accent-color);
+        }
+        
+        .reactor-ring-balancing {
+            border: 6px solid var(--balancing-color);
         }
 
         .soc-label {
@@ -127,8 +137,16 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         .capacity-val {
             font-size: 0.85em;
-            color: var(--secondary-text-color);
             margin-top: -4px;
+            text-align: center;
+        }
+
+        .capacity-val-base {
+            color: var(--secondary-text-color);
+        }
+
+        .capacity-val-balancing {
+            color: var(--balancing-color);
         }
 
         /* Middle Grid */
@@ -267,7 +285,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             color: #e4f3f8;
             border-radius: 999px;
             font-weight: 500;
-            font-size: 0.7em;
+            font-size: 1em;
             min-width: 1.4rem;
             text-align: center;
             margin-right: 3px;
@@ -277,12 +295,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
         .cell-volts {
             color: var(--primary-text-color);
             font-family: monospace;
-            font-size: 0.9em;
+            font-size: 1.2em;
         }
 
         .cell-res {
             color: var(--secondary-text-color);
-            font-size: 0.8em;
+            font-size: 1em;
             font-family: monospace;
         }
 
@@ -330,7 +348,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         }
 
         .path-charge {
-            stroke: var(--accent-color);
+            stroke: var(--solar-color);
         }
 
         .path-discharge {
@@ -400,7 +418,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         this._historyInterval = window.setInterval(() => this.fetchHistory(), 60000); // Update every minute
     }
 
-    private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" = "sensor") {
+    private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor") {
         navigate(event, this.config, entityId, type);
     }
 
@@ -471,7 +489,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
             this._resolveEntityId(EntityKey.total_voltage),
             this._resolveEntityId(EntityKey.current),
             this._resolveEntityId(EntityKey.power_tube_temperature),
-            this._resolveEntityId(EntityKey.delta_cell_voltage)
+            this._resolveEntityId(EntityKey.delta_cell_voltage),
+            this._resolveEntityId(EntityKey.temperature_sensor_1),
+            this._resolveEntityId(EntityKey.temperature_sensor_2),
+            this._resolveEntityId(EntityKey.temperature_sensor_3),
+            this._resolveEntityId(EntityKey.temperature_sensor_4),
+            this._resolveEntityId(EntityKey.balancing_current),
         ].filter(e => e);
 
         // Deduplicate
@@ -580,7 +603,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         `;
     }
 
-    private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
+    private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor"): string {
         return getState(this.hass, this.config, entityKey, precision, defaultValue, type);
     }
 
@@ -588,11 +611,16 @@ export class JkBmsCoreReactorLayout extends LitElement {
         globalData.hass = this.hass;
         if (!this.hass || !this.config) return html``;
 
-        const title = this.config.title || 'Bat 1';
-        const runtime = this.getState(EntityKey.total_runtime_formatted);
-        const header = runtime && runtime != "unknown" ? html` | Time: <b>${runtime.toUpperCase()}</b>` : '';
+        const hardwareVersion = this.getState(EntityKey.hardware_version);
+        const softwareVersion = this.getState(EntityKey.software_version);
+        const title = this.config.title || html`Bat 1 - ${localize('html_texts.capacity')}: <b> ${this.getState(EntityKey.total_battery_capacity_setting)} Ah</b></br>
+        HW: <b>${hardwareVersion}</b> | SW: <b>${softwareVersion}</b>`;
 
+        const runtime = this.getState(EntityKey.total_runtime_formatted);
+        const header = runtime && runtime != "unknown" ? html`${localize('html_texts.time')}: <b>${runtime.toUpperCase()}</b>` : '';
         const current = parseFloat(this.getState(EntityKey.current));
+        const charging_power = this.getState(EntityKey.charging_power);
+        const discharging_power = this.getState(EntityKey.discharging_power);
 
         // Flow Logic: 
         // Charge (Grid -> SOC) when current > 0
@@ -602,10 +630,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
         const isCharging = this.getState(EntityKey.charging, 0, '', 'switch') === 'on';
         const isDischarging = this.getState(EntityKey.discharging, 0, '', 'switch') === 'on';
 
+        const isBalancing = this.getState(EntityKey.balancing, 0, '', 'binary_sensor') === 'on';
+        const balancingCurrent = parseFloat(this.getState(EntityKey.balancing_current));
+
         // Stats
         const soc = this.getState(EntityKey.state_of_charge);
         const capacityVal = this.getState(EntityKey.total_battery_capacity_setting);
-        // const current = parseFloat(this.getState(EntityKey.current)); // Already fetched above
         const totalVolts = this.getState(EntityKey.total_voltage);
         const mosTemp = this.getState(EntityKey.power_tube_temperature);
 
@@ -613,8 +643,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         return html`
             <ha-card class="container">
+                <div class="header clickable" @click=${(e) => this._navigate(e, EntityKey.software_version)}>
+                    ${title}
+                </div>
                 <div class="header clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
-                    ${title} ${header}
+                    ${header}
                 </div>
 
                 <div class="top-section">
@@ -622,25 +655,34 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="flow-node">
                         <div class="icon-circle clickable"
                              @click=${(e) => this._navigate(e, EntityKey.charging, 'switch')}>
-                            <ha-icon icon="mdi:solar-power"></ha-icon>
+                            <ha-icon icon="mdi:solar-power" style="color: ${isChargingFlow ? 'var(--solar-color)' : '#444'};"></ha-icon>
                         </div>
-                        <div class="node-label">Grid/Solar</div>
+                        <div class="node-label">${localize('html_texts.grid-solar')}</div>
                         <div class="node-status">
-                            Charge: <span
+                            ${localize('html_texts.charge')}: <span
                                 class="${isCharging ? 'status-on' : 'status-off'}">${isCharging ? 'ON' : 'OFF'}</span>
+                        </div>
+                        <div class="node-status">
+                            <div class="stat-value val-white clickable"
+                                 @click=${(e) => this._navigate(e, EntityKey.charging_power)}>${charging_power} W
+                            </div>
                         </div>
                     </div>
 
                     <!-- Reactor (SOC) -->
                     <div class="reactor-container">
-                        <div class="reactor-ring clickable"
+                        <div class="reactor-ring ${isBalancing ? "reactor-ring-balancing" : "reactor-ring-base"} clickable" 
                              @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>
-                            <div class="soc-label">SOC:</div>
+                            <div class="soc-label">SoC:</div>
                             <div class="soc-value">${soc}%</div>
-                            <div class="capacity-val clickable"
-                                 @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>
-                                Remaining:<br>${this.getState(EntityKey.capacity_remaining)} Ah
-                            </div>
+                            ${isBalancing ? 
+                                    html`<div class="capacity-val capacity-val-balancing clickable"
+                                            @click=${(e) => this._navigate(e, EntityKey.balancing_current)}>
+                                                ${localize('html_texts.balancing')}:<br>${this.getState(EntityKey.balancing_current)} A</div>` : 
+                                    html`<div class="capacity-val capacity-val-base clickable"
+                                            @click=${(e) => this._navigate(e, EntityKey.capacity_remaining)}>
+                                                ${localize('html_texts.remaining')}:<br>${this.getState(EntityKey.capacity_remaining)} Ah</div>`
+                                }
                         </div>
                     </div>
 
@@ -648,12 +690,18 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="flow-node">
                         <div class="icon-circle clickable"
                              @click=${(e) => this._navigate(e, EntityKey.discharging, 'switch')}>
-                            <ha-icon icon="mdi:power-plug"></ha-icon>
+                            <ha-icon icon="mdi:power-plug" style="color: ${isDischargingFlow ? 'var(--discharge-color)' : '#444'};"></ha-icon>
                         </div>
-                        <div class="node-label">Load</div>
+                        <div class="node-label">${localize('html_texts.load')}</div>
                         <div class="node-status">
-                            Discharge: <span
+                            ${localize('html_texts.discharge')}: <span
                                 class="${isDischarging ? 'status-on' : 'status-off'}">${isDischarging ? 'ON' : 'OFF'}</span>
+                        </div>
+                        
+                        <div class="node-status">
+                            <div class="stat-value val-white clickable"
+                                 @click=${(e) => this._navigate(e, EntityKey.discharging_power)}>${discharging_power} W
+                            </div>
                         </div>
                     </div>
 
@@ -680,15 +728,15 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="stats-panel">
                         <div class="metric-group">
                             ${this._renderSparkline(EntityKey.total_voltage, '#41CD52')}
-                            <div class="stat-label">Total Voltage:</div>
+                            <div class="stat-label">${localize('html_texts.total-voltage')}:</div>
                             <div class="stat-value val-white clickable"
-                                 @click=${(e) => this._navigate(e, EntityKey.total_voltage)}>${totalVolts} V
+                                 @click=${(e) => this._navigate(e, EntityKey.total_voltage)}>${totalVolts} ${localize('html_texts.volt')}
                             </div>
                         </div>
 
                         <div class="metric-group">
-                            ${this._renderSparkline(EntityKey.current, '#3090c7')}
-                            <div class="stat-label">Current:</div>
+                            ${this._renderSparkline(EntityKey.current, '#3090c7' )}
+                            <div class="stat-label">${localize('html_texts.current')}:</div>
                             <div class="stat-value val-white clickable"
                                  @click=${(e) => this._navigate(e, EntityKey.current)}>${current} A
                             </div>
@@ -698,7 +746,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <div class="stats-panel">
                         <div class="metric-group">
                             ${this._renderSparkline(EntityKey.power_tube_temperature, '#FFA500')}
-                            <div class="stat-label">MOS Temp:</div>
+                            <div class="stat-label">${localize('html_texts.mosfetTemp')}:</div>
                             <div class="stat-value val-white clickable"
                                  @click=${(e) => this._navigate(e, EntityKey.power_tube_temperature)}>${mosTemp} °C
                             </div>
@@ -706,11 +754,81 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
                         <div class="metric-group">
                             ${this._renderSparkline(EntityKey.delta_cell_voltage, '#41CD52')}
-                            <div class="stat-label">Delta ${this.config.deltaVoltageUnit || 'V'}:</div>
+                            <div class="stat-label">${localize('html_texts.delta')} ${this.config.deltaVoltageUnit || `${localize('html_texts.volt')}`}:</div>
                             <div class="stat-value val-green clickable"
                                  @click=${(e) => this._navigate(e, EntityKey.delta_cell_voltage)}>
                                 ${formatDeltaVoltage(this.config.deltaVoltageUnit, this.maxDeltaV)}
                             </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Temp 1 & 2 -->
+                    <div class="stats-panel">
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_1, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    <svg style="position:absolute; inset:0; opacity:0.25; pointer-events:none;">
+                                    </svg>
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_1, color)}
+                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 1</div>
+                                    <div class="stat-value clickable" style="color: ${color};" 
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_1)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_2, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_2, color)}
+                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 2</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_2)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                    </div>
+
+                    <!-- Temp 3 & 4 -->
+                    <div class="stats-panel">
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_3, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_3, color)}
+                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 3</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_3)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                        <div class="metric-group">
+                            ${(() => {
+                                const tempStr = this.getState(EntityKey.temperature_sensor_4, 1, '—');
+                                const tempVal = parseFloat(tempStr);
+                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
+                                return html`
+                                    ${this._renderSparkline(EntityKey.temperature_sensor_4, color)}
+                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 4</div>
+                                    <div class="stat-value clickable" style="color: ${color};"
+                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_4)}>
+                                        ${tempStr} °C
+                                    </div>
+                                `;
+                            })()}
                         </div>
                     </div>
                 </div>
@@ -756,6 +874,52 @@ export class JkBmsCoreReactorLayout extends LitElement {
             this.maxCellId = maxId;
             this.maxDeltaV = parseFloat((maxV - minV).toFixed(3));
         }
+    }
+
+    private getTemperatureColor(temp: number): string {
+        // Limite configurabile – ajustează după nevoile tale (ex. pentru baterie JK-BMS)
+        const cold = 5;     // sub asta → albastru rece / îngheț
+        const optimalLow = 15;
+        const optimalHigh = 35;
+        const hot = 45;     // peste asta → roșu intens / alarmă
+
+        // Culori de referință (hex)
+        const colors = [
+            { temp: -10, color: '#0000FF' },   // deep blue (foarte rece)
+            { temp: 0,   color: '#00BFFF' },   // light blue / cyan rece
+            { temp: 20,  color: '#41CD52' },   // lime green (optim)
+            { temp: 30,  color: '#FFD700' },   // gold/yellow
+            { temp: 40,  color: '#FF8C00' },   // orange
+            { temp: 50,  color: '#FF4500' },   // orangered
+            { temp: 60,  color: '#DC143C' },   // crimson (prea fierbinte)
+        ];
+
+        // Găsește intervalul și interpolează
+        for (let i = 0; i < colors.length - 1; i++) {
+            const curr = colors[i];
+            const next = colors[i + 1];
+
+            if (temp <= curr.temp) return curr.color;
+            if (temp >= next.temp) continue;
+
+            // Interpolare liniară între curr și next
+            const ratio = (temp - curr.temp) / (next.temp - curr.temp);
+            const r1 = parseInt(curr.color.slice(1,3), 16);
+            const g1 = parseInt(curr.color.slice(3,5), 16);
+            const b1 = parseInt(curr.color.slice(5,7), 16);
+            const r2 = parseInt(next.color.slice(1,3), 16);
+            const g2 = parseInt(next.color.slice(3,5), 16);
+            const b2 = parseInt(next.color.slice(5,7), 16);
+
+            const r = Math.round(r1 + ratio * (r2 - r1));
+            const g = Math.round(g1 + ratio * (g2 - g1));
+            const b = Math.round(b1 + ratio * (b2 - b1));
+
+            return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+        }
+
+        // Dacă e peste maxim → ultimul color (roșu intens)
+        return colors[colors.length - 1].color;
     }
 
     private _renderCells(): TemplateResult[] {
@@ -859,7 +1023,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 ${orientation === 'vertical' ? html`
                     <span class="cell-id">${String(i).padStart(2, '0')}</span>
                     <span class="cell-volts ${valClass} clickable" style="${textBgStyle}"
-                          @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>${v} V</span>
+                          @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>${v} ${localize('html_texts.volt')}</span>
                     ${showResistance ? html`
                         <span class="cell-res clickable" style="${textBgStyle}"
                               @click=${(e) => this._navigate(e, EntityKey[`cell_resistance_${i}`] as EntityKey)}>${r} Ω</span>
@@ -868,7 +1032,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     <span class="clickable"
                           @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`] as EntityKey)}>
                             <span class="cell-id">${String(i).padStart(2, '0')}</span>
-                            <span class="cell-volts ${valClass}" style="${textBgStyle}">${v} V</span>
+                            <span class="cell-volts ${valClass}" style="${textBgStyle}">${v} ${localize('html_texts.volt')}</span>
                         </span>
                     ${showResistance ? html`
                         <span class="cell-res clickable" style="${textBgStyle}"
