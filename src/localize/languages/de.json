@@ -1,0 +1,62 @@
+{
+  "common": {
+    "title": "JK BMS Karte",
+    "description": "Eine anpassbare Home Assistant Karte, die den JK BMS Bildschirm nachbildet",
+    "version": "Version"
+  },
+  "config": {
+    "language": "Sprache",
+    "title": "Titel",
+    "prefix": "Präfix der Sensoren",
+    "cellCount": "Anzahl der Zellen",
+    "cellColumns": "Anzahl der Spalten",
+    "cellLayout": "Zellen-Layout",
+    "layout": "Layout",
+    "deltaVoltageUnit": "Einheit der Spannungsdifferenz",
+    "cellColorMode": "Zellen-Farbmodus",
+    "cellOrientation": "Zellen-Ausrichtung",
+    "minCellVoltage": "Min. Zellspannung (V)",
+    "maxCellVoltage": "Max. Zellspannung (V)",
+    "manualAssignment": "Manuelle Entitäten-Zuweisung",
+    "tempSensorsCount": "Anzahl verfügbarer Temperatursensoren",
+    "hasHeater": "Heizungs-Option wird verwendet"
+  },
+  "switches": {
+    "charge": "Laden",
+    "discharge": "Entladen",
+    "balance": "Balancing",
+    "heater": "Heizung"
+  },
+  "stats": {
+    "power": "Leistung:",
+    "capacity": "Kapazität:",
+    "cycleCapacity": "Zyklus-Kap.:",
+    "averageCellV": "Durchschn. V:",
+    "balanceCurrent": "Balancing-Strom:",
+    "stateOfCharge": "SOC:",
+    "remainingAmps": "Verbleibend:",
+    "cycles": "Zyklen:",
+    "delta": "Spannungsdiff.:",
+    "mosfetTemp": "MOS Temp:",
+    "temperature_sensor_1": "Temp. 1:",
+    "temperature_sensor_2": "Temp. 2:",
+    "temperature_sensor_3": "Temp. 3:",
+    "temperature_sensor_4": "Temp. 4:"
+  },
+  "html_texts": {
+    "capacity": "Kapazität",
+    "time": "Zeit",
+    "grid-solar": "Netz/Solar",
+    "load": "Last",
+    "total-voltage": "Gesamtspannung",
+    "current": "Stromstärke",
+    "mosfetTemp": "MOS Temp",
+    "delta": "Differenz",
+    "temperature_sensor": "Temp",
+    "balancing": "Balancing",
+    "volt": "V",
+    "charge": "Laden",
+    "discharge": "Entladen",
+    "remaining": "Restzeit"
+  }
+}
