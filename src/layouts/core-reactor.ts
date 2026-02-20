@@ -113,7 +113,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: radial-gradient(circle, rgba(65, 205, 82, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+            background: var(--card-background-color);
         }
 
         .reactor-ring-base {
@@ -344,15 +344,16 @@ export class JkBmsCoreReactorLayout extends LitElement {
             fill: none;
             stroke-width: 2;
             stroke-dasharray: 8;
-            animation: flow 1s linear infinite;
         }
 
         .path-charge {
             stroke: var(--solar-color);
+            animation: flow 1s linear infinite;
         }
 
         .path-discharge {
             stroke: var(--discharge-color);
+            animation: flow 1s linear infinite;
         }
 
         .path-inactive {
@@ -706,7 +707,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
                     </div>
 
                     <!-- SVG Flow Lines -->
-                    <svg class="flow-svg" viewBox="0 0 400 180" preserveAspectRatio="none">
+                    <svg class="flow-svg" viewBox="0 0 400 180" preserveAspectRatio="meet">
                         <!-- Left path (Charge) - Rough coordinates for now, will refine -->
                         <path d="M 60,70 Q 120,70 125,90" class="${isChargingFlow ? 'path-charge' : 'path-inactive'}"/>
                         <!-- Right path (Discharge) -->
