@@ -1,0 +1,62 @@
+{
+  "common": {
+    "title": "Card JK BMS",
+    "description": "Un card Home Assistant personalizabil care imită ecranul JK BMS",
+    "version": "Versiune"
+  },
+  "config": {
+    "language": "Limba",
+    "title": "Titlu",
+    "prefix": "Prefixul senzorilor",
+    "cellCount": "Număr de celule",
+    "cellColumns": "Număr de coloane",
+    "cellLayout": "Aranjament celule",
+    "layout": "Aranjament general",
+    "deltaVoltageUnit": "Unitate diferență tensiune",
+    "cellColorMode": "Mod colorare celule",
+    "cellOrientation": "Orientare celule",
+    "minCellVoltage": "Tensiune minimă celulă (V)",
+    "maxCellVoltage": "Tensiune maximă celulă (V)",
+    "manualAssignment": "Atribuire manuală entități",
+    "tempSensorsCount": "Număr senzori temperatură disponibili",
+    "hasHeater": "Opțiunea încălzitor este utilizată"
+  },
+  "switches": {
+    "charge": "Încărcare",
+    "discharge": "Descărcare",
+    "balance": "Echilibrare",
+    "heater": "Încălzitor"
+  },
+  "stats": {
+    "power": "Putere:",
+    "capacity": "Capacitate:",
+    "cycleCapacity": "Cap. ciclu:",
+    "averageCellV": "Medie celule:",
+    "balanceCurrent": "Curent echilibrare:",
+    "stateOfCharge": "SOC:",
+    "remainingAmps": "Rămase:",
+    "cycles": "Cicluri:",
+    "delta": "Diferență tensiune:",
+    "mosfetTemp": "Temp. MOSFET:",
+    "temperature_sensor_1": "Temp. 1:",
+    "temperature_sensor_2": "Temp. 2:",
+    "temperature_sensor_3": "Temp. 3:",
+    "temperature_sensor_4": "Temp. 4:"
+  },
+  "html_texts": {
+    "capacity": "Capacitate",
+    "time": "Timp",
+    "grid-solar": "Rețea/Solar",
+    "load": "Consum",
+    "total-voltage": "Tensiune totală",
+    "current": "Curent",
+    "mosfetTemp": "Temp. MOSFET",
+    "delta": "Diferență",
+    "temperature_sensor": "Temp",
+    "balancing": "Echilibrare",
+    "volt": "V",
+    "charge": "Încărcare",
+    "discharge": "Descărcare",
+    "remaining": "Rămas"
+  }
+}

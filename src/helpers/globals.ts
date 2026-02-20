@@ -1,6 +1,12 @@
 import { HomeAssistant } from 'custom-card-helpers';
+import { JkBmsCardConfig } from '../interfaces';
 
-export const globalData = {
+export interface GlobalData {
+  hass: HomeAssistant | null;
+  cardConfig?: JkBmsCardConfig;
+}
+
+export const globalData: GlobalData ={
     hass: null as HomeAssistant | null,
 };
 
