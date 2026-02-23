@@ -16,6 +16,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
     maxCellId: string = '';
     maxDeltaV: number = 0.000;
     shouldBalance: boolean = false;
+    tempSensorsCount: number = 0;
 
     @property() private historyData: Record<string, any[]> = {};
     private _historyInterval?: number;
@@ -201,6 +202,28 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         .val-orange {
             color: orange;
+        }
+
+        .icon-stats {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: 12px; 
+            width: 100%;
+        }
+
+        .icon-stats > .icon-circle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            justify-self: start;
+        }
+
+        .icon-stats > :nth-child(2) {
+            justify-self: end;
+            padding-right: 20px; 
         }
 
         /* Cell Grid */
@@ -639,6 +662,10 @@ export class JkBmsCoreReactorLayout extends LitElement {
         const capacityVal = this.getState(EntityKey.total_battery_capacity_setting);
         const totalVolts = this.getState(EntityKey.total_voltage);
         const mosTemp = this.getState(EntityKey.power_tube_temperature);
+        const totalChargingCycleCapacity = this.getState(EntityKey.total_charging_cycle_capacity);
+        const chargingCycles = parseFloat(this.getState(EntityKey.charging_cycles)).toFixed(0).toString();
+
+        this.tempSensorsCount = this.config.tempSensorsCount;
 
         this.calculateDynamicMinMax();
 
@@ -763,73 +790,35 @@ export class JkBmsCoreReactorLayout extends LitElement {
                         </div>
                     </div>
                     
-                    <!-- Temp 1 & 2 -->
-                    <div class="stats-panel">
-                        <div class="metric-group">
-                            ${(() => {
-                                const tempStr = this.getState(EntityKey.temperature_sensor_1, 1, '—');
-                                const tempVal = parseFloat(tempStr);
-                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
-                                return html`
-                                    <svg style="position:absolute; inset:0; opacity:0.25; pointer-events:none;">
-                                    </svg>
-                                    ${this._renderSparkline(EntityKey.temperature_sensor_1, color)}
-                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 1</div>
-                                    <div class="stat-value clickable" style="color: ${color};" 
-                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_1)}>
-                                        ${tempStr} °C
-                                    </div>
-                                `;
-                            })()}
-                        </div>
-                        <div class="metric-group">
-                            ${(() => {
-                                const tempStr = this.getState(EntityKey.temperature_sensor_2, 1, '—');
-                                const tempVal = parseFloat(tempStr);
-                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
-                                return html`
-                                    ${this._renderSparkline(EntityKey.temperature_sensor_2, color)}
-                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 2</div>
-                                    <div class="stat-value clickable" style="color: ${color};"
-                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_2)}>
-                                        ${tempStr} °C
-                                    </div>
-                                `;
-                            })()}
+                    ${this.renderTemperatureSensors()}
+
+                    <!-- Add cycle capacity -->
+                    <div class="stats-panel" style="padding:0px 10px 0px 10px; height: fit-content;">
+                        <div class="metric-group" style="height:auto;">
+                            <div class="stat-label">${localize('stats.cycleCapacity')}</div>
+                            <div class="icon-stats">
+                                <div class="icon-circle">
+                                    <ha-icon icon="mdi:fuel-cell"/>
+                                </div>
+                                <div class="stat-value val-white clickable"
+                                        @click=${(e) => this._navigate(e, EntityKey.total_charging_cycle_capacity)}>${totalChargingCycleCapacity} Ah
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- Temp 3 & 4 -->
-                    <div class="stats-panel">
-                        <div class="metric-group">
-                            ${(() => {
-                                const tempStr = this.getState(EntityKey.temperature_sensor_3, 1, '—');
-                                const tempVal = parseFloat(tempStr);
-                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
-                                return html`
-                                    ${this._renderSparkline(EntityKey.temperature_sensor_3, color)}
-                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 3</div>
-                                    <div class="stat-value clickable" style="color: ${color};"
-                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_3)}>
-                                        ${tempStr} °C
-                                    </div>
-                                `;
-                            })()}
-                        </div>
-                        <div class="metric-group">
-                            ${(() => {
-                                const tempStr = this.getState(EntityKey.temperature_sensor_4, 1, '—');
-                                const tempVal = parseFloat(tempStr);
-                                const color = isNaN(tempVal) ? '#777777' : this.getTemperatureColor(tempVal);
-                                return html`
-                                    ${this._renderSparkline(EntityKey.temperature_sensor_4, color)}
-                                    <div class="stat-label">${localize('html_texts.temperature_sensor')} 4</div>
-                                    <div class="stat-value clickable" style="color: ${color};"
-                                        @click=${(e) => this._navigate(e, EntityKey.temperature_sensor_4)}>
-                                        ${tempStr} °C
-                                    </div>
-                                `;
-                            })()}
+                    
+                    <!-- Add number of cycles -->
+                    <div class="stats-panel" style="padding:0px 10px 0px 10px; height: fit-content;">
+                        <div class="metric-group" style="height:auto;">
+                            <div class="stat-label">${localize('stats.cycles')}</div>
+                            <div class="icon-stats">
+                                <div class="icon-circle">
+                                    <ha-icon icon="mdi:battery-sync"/>
+                                </div>
+                                <div class="stat-value val-white clickable"
+                                        @click=${(e) => this._navigate(e, EntityKey.charging_cycles)}>${chargingCycles}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -921,6 +910,53 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         // Dacă e peste maxim → ultimul color (roșu intens)
         return colors[colors.length - 1].color;
+    }
+
+    private renderTemperatureSensors() {
+        if (!this.tempSensorsCount || this.tempSensorsCount === 0) {
+            return html``;
+        }
+
+        const show1 = this.tempSensorsCount >= 1;
+        const show2 = this.tempSensorsCount >= 2;
+        const show3 = this.tempSensorsCount >= 3;
+        const show4 = this.tempSensorsCount >= 4;
+
+        const renderSensor = (sensorKey: EntityKey, number: number) => {
+            const tempStr = this.getState(sensorKey, 1, '—');
+            const tempVal = parseFloat(tempStr);
+            const color = isNaN(tempVal)
+                ? '#777777'
+                : this.getTemperatureColor(tempVal);
+
+            return html`
+                <div class="metric-group">
+                    ${this._renderSparkline(sensorKey, color)}
+                    <div class="stat-label">
+                        ${localize('html_texts.temperature_sensor')} ${number}
+                    </div>
+                    <div class="stat-value clickable"
+                        style="color: ${color};"
+                        @click=${(e) => this._navigate(e, sensorKey)}>
+                        ${tempStr} °C
+                    </div>
+                </div>
+            `;
+        };
+
+        return html`
+            <!-- Left column (1 and 3) -->
+            <div class="stats-panel">
+                ${show1 ? renderSensor(EntityKey.temperature_sensor_1, 1) : ''}
+                ${show3 ? renderSensor(EntityKey.temperature_sensor_3, 3) : ''}
+            </div>
+
+            <!-- Right column (2 and 4) -->
+            <div class="stats-panel">
+                ${show2 ? renderSensor(EntityKey.temperature_sensor_2, 2) : ''}
+                ${show4 ? renderSensor(EntityKey.temperature_sensor_4, 4) : ''}
+            </div>
+        `;
     }
 
     private _renderCells(): TemplateResult[] {

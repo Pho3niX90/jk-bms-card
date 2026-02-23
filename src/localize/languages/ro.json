@@ -30,7 +30,7 @@
   "stats": {
     "power": "Putere:",
     "capacity": "Capacitate:",
-    "cycleCapacity": "Cap. ciclu:",
+    "cycleCapacity": "Cap. totală:",
     "averageCellV": "Medie celule:",
     "balanceCurrent": "Curent echilibrare:",
     "stateOfCharge": "SOC:",
