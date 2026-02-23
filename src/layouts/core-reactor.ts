@@ -223,7 +223,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
         .icon-stats > :nth-child(2) {
             justify-self: end;
-            padding-right: 20px; 
+            padding-right: 5px;
+        }
+
+        .icon-stats > .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
         }
 
         /* Cell Grid */
