@@ -85,7 +85,7 @@ jobs:
 
       - name: 🛎️ Create release
         if: env.is_higher_version == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/jk-bms-card.js
           tag_name: v${{ env.version }}
