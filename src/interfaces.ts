@@ -13,5 +13,11 @@ export interface JkBmsCardConfig extends LovelaceCardConfig {
     cellOrientation?: 'vertical' | 'horizontal';
     minCellVoltage?: number;
     maxCellVoltage?: number;
-    entities: Record<EntityKey, string>;
+    titleAction?: 'device' | 'more-info';
+    deviceId?: string;
+    cells?: string[];
+    cell_resistances?: string[];
+    cellPrefix?: string;
+    cellResistancePrefix?: string;
+    entities: Record<EntityKey | string, string>;
 }

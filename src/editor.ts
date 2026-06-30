@@ -132,6 +132,14 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         }
 
         const entityConfigs = [
+            {
+                name: 'cell_prefix',
+                selector: { text: {} }
+            },
+            {
+                name: 'cell_resistance_prefix',
+                selector: { text: {} }
+            },
             ...this._fixedEntities.map(key => ({
                 name: key,
                 selector: { entity: {} }
@@ -184,6 +192,17 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                             type: 'grid',
                             schema: [
                                 { name: 'title', selector: { text: {} } },
+                                {
+                                    name: 'titleAction',
+                                    selector: {
+                                        select: {
+                                            options: [
+                                                { label: 'Device page', value: 'device' },
+                                                { label: 'Runtime history', value: 'more-info' }
+                                            ]
+                                        }
+                                    }
+                                },
                             ],
                         },
                     ],
@@ -198,6 +217,7 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                             schema: [
                                 { name: 'prefix', selector: { text: {} } },
                                 { name: 'batteryName', selector: { text: {} } },
+                                { name: 'deviceId', selector: { text: {} } },
                             ],
                         },
                     ],
