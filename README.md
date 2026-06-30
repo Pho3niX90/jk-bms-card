@@ -24,19 +24,19 @@ if your entities start with **jk_bms**_total_voltage, your prefix will be **jk_b
 
 ## Title action
 
-By default, clicking the card title opens the Home Assistant device page for the BMS when the frontend exposes a device id for the runtime entity. If your Home Assistant version does not expose that metadata, set `deviceId` manually:
+By default, clicking the card title keeps the original behavior and opens runtime history. To open the Home Assistant device page for the BMS when the frontend exposes a device id for the runtime entity:
+
+```yaml
+type: custom:jk-bms-card
+titleAction: device
+```
+
+If your Home Assistant version does not expose that metadata, set `deviceId` manually:
 
 ```yaml
 type: custom:jk-bms-card
 titleAction: device
 deviceId: abcdef1234567890
-```
-
-To keep the original behavior where the title opens runtime history:
-
-```yaml
-type: custom:jk-bms-card
-titleAction: more-info
 ```
 
 ## ESPHome v3 compatibility
@@ -62,7 +62,7 @@ cells:
   - sensor.pack_cell_a
   - sensor.pack_cell_b
   - sensor.pack_cell_c
-cell_resistances:
+cellResistances:
   - sensor.pack_cell_a_resistance
   - sensor.pack_cell_b_resistance
   - sensor.pack_cell_c_resistance

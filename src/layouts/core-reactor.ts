@@ -4,7 +4,7 @@ import { HomeAssistant } from 'custom-card-helpers';
 import { EntityKey } from '../const';
 import { JkBmsCardConfig } from '../interfaces';
 import { globalData } from '../helpers/globals';
-import { configOrEnum, formatValue, getState, getUnit, isCellBalancing, navigate, navigateTitle } from '../helpers/utils';
+import { configOrEnum, formatValue, getState, getUnit, isCellBalancing, navigate, navigateTitle, resolveEntityId } from '../helpers/utils';
 import { localize } from '../localize/localize';
 import {version} from '../../package.json';
 
@@ -659,11 +659,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
     }
 
     private _resolveEntityId(entityKey: EntityKey): string | undefined {
-        const configValue = this.configOrEnum(entityKey);
-        if (!configValue) return undefined;
-        // Logic must match getState: if regular entity_id (contains dot), use as is.
-        // Otherwise assume it's a suffix and prepend sensor.<prefix>_
-        return configValue.includes('.') ? configValue : `sensor.${this.config.prefix}_${configValue}`;
+        return resolveEntityId(this.hass, this.config, entityKey);
     }
 
     _renderSparkline(entityKey: EntityKey, color: string): TemplateResult {
@@ -1269,8 +1265,10 @@ export class JkBmsCoreReactorLayout extends LitElement {
             return;
         }
 
-        const hostEl = this.renderRoot instanceof ShadowRoot ? (this.renderRoot.host as HTMLElement) : this;
-        const cardRect = hostEl.getBoundingClientRect();
+        const svg = this.renderRoot.querySelector('#cell-flow-svg') as SVGSVGElement;
+        if (!svg) return;
+
+        const cardRect = svg.getBoundingClientRect();
         const minRect = minEl.getBoundingClientRect();
         const maxRect = maxEl.getBoundingClientRect();
 

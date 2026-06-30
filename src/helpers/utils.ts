@@ -54,7 +54,7 @@ const generatedCellEntity = (
 
     const resistanceIndex = cellIndexFromKey(entityKey, 'cell_resistance');
     if (resistanceIndex) {
-        const manual = arrayEntity(config?.cell_resistances, resistanceIndex);
+        const manual = arrayEntity(config?.cellResistances ?? (config as any)?.cell_resistances, resistanceIndex);
         if (manual) return withDomain(manual, type);
 
         const prefix = configuredPrefix(config, 'cell_resistance_prefix', 'cellResistancePrefix');
@@ -72,15 +72,23 @@ const candidateEntityIds = (
     const generatedCell = generatedCellEntity(config, entityKey, type);
     if (generatedCell) return [generatedCell];
 
-    const configValue = configOrEnum(config, entityKey);
-    if (!configValue) return [];
+    const configuredValue = config?.entities?.[entityKey]?.toString()?.trim();
+    const legacyValue = entityKey?.toString();
+    const aliases = (ENTITY_ALIASES[entityKey] ?? []).map(alias => prefixedEntityId(config, alias, type));
+    const legacyEntityId = legacyValue ? prefixedEntityId(config, legacyValue, type) : undefined;
 
-    const candidates = [
-        ...((ENTITY_ALIASES[entityKey] ?? []).map(alias => prefixedEntityId(config, alias, type))),
-        isFullEntityId(configValue) ? configValue : prefixedEntityId(config, configValue, type),
-    ];
+    const candidates = configuredValue && configuredValue.length > 1
+        ? [
+            isFullEntityId(configuredValue) ? configuredValue : prefixedEntityId(config, configuredValue, type),
+            ...aliases,
+            legacyEntityId,
+        ]
+        : [
+            ...aliases,
+            legacyEntityId,
+        ];
 
-    return [...new Set(candidates)];
+    return [...new Set(candidates.filter(Boolean) as string[])];
 };
 
 export const resolveEntityId = (
@@ -127,7 +135,7 @@ export const navigate = (event, config: JkBmsCardConfig, entityId: EntityKey, ty
 }
 
 export const navigateTitle = (event, hass: HomeAssistant, config: JkBmsCardConfig) => {
-    if (config?.titleAction === 'more-info') {
+    if (config?.titleAction !== 'device') {
         navigate(event, config, EntityKey.total_runtime_formatted, 'sensor', hass);
         return;
     }
@@ -180,7 +188,7 @@ export const getUnit = ( hass: HomeAssistant, config: JkBmsCardConfig, entityKey
 };
 
 export const isCellBalancing = (hass: HomeAssistant, config: JkBmsCardConfig, cellNumber: number): boolean => {
-    const raw = getState(hass, config, EntityKey.balancer_status_bitmask, 0, '');
+    const raw = resolveEntity(hass, config, EntityKey.balancer_status_bitmask)?.state ?? '';
     const value = raw?.toString()?.trim();
     if (!value || value === 'unknown' || value === 'unavailable') return false;
 
@@ -188,12 +196,14 @@ export const isCellBalancing = (hass: HomeAssistant, config: JkBmsCardConfig, ce
     try {
         if (/^0b[01]+$/i.test(value)) {
             mask = BigInt(value);
-        } else if (/^[01]+$/.test(value) && value.length > 8) {
+        } else if (/^[01]+$/.test(value) && value.length === config?.cellCount) {
             mask = BigInt(`0b${value}`);
         } else if (/^0x[0-9a-f]+$/i.test(value)) {
             mask = BigInt(value);
+        } else if (/^\d+$/.test(value)) {
+            mask = BigInt(value);
         } else {
-            mask = BigInt(Number(value));
+            return false;
         }
     } catch {
         return false;
