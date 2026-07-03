@@ -5,7 +5,7 @@ import { EntityKey } from '../const';
 import { JkBmsCardConfig } from '../interfaces';
 import { localize } from '../localize/localize';
 import { globalData } from '../helpers/globals';
-import { navigate, getState, getUnit, configOrEnum, formatValue } from '../helpers/utils';
+import { navigate, getState, getUnit, configOrEnum, formatValue, isCellBalancing, navigateTitle } from '../helpers/utils';
 import { version } from '../../package.json';
 
 @customElement('jk-bms-default-layout')
@@ -213,6 +213,12 @@ export class JkBmsDefaultLayout extends LitElement {
             color: red;
         }
 
+        .cell-balancing .pill,
+        .cell-balancing .label {
+            color: #41CD52;
+            font-weight: bold;
+        }
+
         .pill {
             display: inline-block;
             padding: 0.2rem 0.2rem;
@@ -276,7 +282,11 @@ export class JkBmsDefaultLayout extends LitElement {
     `;
 
     private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" = "sensor") {
-        navigate(event, this.config, entityId, type);
+        navigate(event, this.config, entityId, type, this.hass);
+    }
+
+    private _navigateTitle(event) {
+        navigateTitle(event, this.hass, this.config);
     }
 
     private getState(entityKey: EntityKey, precision: number = 2, defaultValue = '', type: "sensor" | "switch" | "number" = "sensor"): string {
@@ -362,7 +372,7 @@ export class JkBmsDefaultLayout extends LitElement {
         return html`
         <ha-card>
             <div class="grid grid-1 p-3 section-padding">
-                <div class="center clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
+                <div class="center clickable" @click=${(e) => this._navigateTitle(e)}>
                     ${showTitle ? title : ''}
                 </div>
             </div>
@@ -529,6 +539,7 @@ export class JkBmsDefaultLayout extends LitElement {
         const color = i.toString() === minCell ? 'voltage-low'
             : i.toString() === maxCell ? 'voltage-high'
                 : '';
+        const balancingClass = isCellBalancing(this.hass, this.config, i) ? 'cell-balancing' : '';
         const resExists = showRes && resistance !== '-';
         const cellUnit = localize('html_texts.volt');
 
@@ -538,7 +549,7 @@ export class JkBmsDefaultLayout extends LitElement {
           </span>` : '';
 
         return html`
-            <div class="center cell-container" id="cell-${i}">
+            <div class="center cell-container ${balancingClass}" id="cell-${i}">
                 <div class="cell-div-${i}">
                     <div class="clickable ${columns > 4 || (columns > 3 && resExists === true) ? "multi-line" : "single-line"}" @click=${(e) => this._navigate(e, EntityKey[`cell_voltage_${i}`],)}>
                         <span class="pill">${i.toString().padStart(2, '0')}</span>

@@ -1,6 +1,8 @@
 import { LovelaceCardConfig } from 'custom-card-helpers';
 import { EntityKey } from './const';
 
+type ExtraEntityKey = 'cell_prefix' | 'cell_resistance_prefix' | 'device_id';
+
 export interface JkBmsCardConfig extends LovelaceCardConfig {
     title: string;
     prefix: string; // The entity prefix (e.g., "jk_bms_bms0_")
@@ -13,5 +15,11 @@ export interface JkBmsCardConfig extends LovelaceCardConfig {
     cellOrientation?: 'vertical' | 'horizontal';
     minCellVoltage?: number;
     maxCellVoltage?: number;
-    entities: Record<EntityKey, string>;
+    titleAction?: 'device' | 'more-info';
+    deviceId?: string;
+    cells?: string[];
+    cellResistances?: string[];
+    cellPrefix?: string;
+    cellResistancePrefix?: string;
+    entities: Partial<Record<EntityKey | ExtraEntityKey, string>>;
 }

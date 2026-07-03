@@ -4,7 +4,7 @@ import { HomeAssistant } from 'custom-card-helpers';
 import { EntityKey } from '../const';
 import { JkBmsCardConfig } from '../interfaces';
 import { globalData } from '../helpers/globals';
-import { configOrEnum, formatValue, getState, getUnit, navigate } from '../helpers/utils';
+import { configOrEnum, formatValue, getState, getUnit, isCellBalancing, navigate, navigateTitle, resolveEntityId } from '../helpers/utils';
 import { localize } from '../localize/localize';
 import {version} from '../../package.json';
 
@@ -22,6 +22,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
     @property() private historyData: Record<string, any[]> = {};
     private _historyInterval?: number;
+    private _boundUpdateCellFlowLine = () => this._updateCellFlowLine();
 
     static styles = css`
         :host {
@@ -41,6 +42,8 @@ export class JkBmsCoreReactorLayout extends LitElement {
             padding: 8px;
             box-sizing: border-box;
             border-radius: var(--ha-card-border-radius, 12px);
+            position: relative;
+            overflow: hidden;
         }
 
         .header {
@@ -103,6 +106,39 @@ export class JkBmsCoreReactorLayout extends LitElement {
             justify-content: center;
             position: relative;
             z-index: 2;
+        }
+
+        .reactor-controls {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 6px;
+            width: 100%;
+        }
+
+        .reactor-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            min-width: 54px;
+            padding: 3px 6px;
+            border: var(--panel-border);
+            border-radius: 999px;
+            background: var(--panel-bg);
+            color: var(--secondary-text-color);
+            font-size: 0.72em;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .reactor-control ha-icon {
+            --mdc-icon-size: 16px;
+        }
+
+        .reactor-control-on {
+            color: var(--accent-color);
+            border-color: var(--accent-color);
         }
 
         .reactor-ring {
@@ -348,6 +384,17 @@ export class JkBmsCoreReactorLayout extends LitElement {
             color: var(--discharge-color);
         }
 
+        .cell-balancing {
+            border: 1px solid var(--accent-color);
+        }
+
+        .cell-balancing .cell-id,
+        .cell-balancing .cell-volts,
+        .cell-balancing .cell-res {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
         .status-on {
             color: var(--accent-color);
             font-weight: bold;
@@ -378,6 +425,25 @@ export class JkBmsCoreReactorLayout extends LitElement {
             fill: none;
             stroke-width: 2;
             stroke-dasharray: 8;
+        }
+
+        .cell-flow-line {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .cell-flow-line path {
+            stroke: var(--accent-color);
+            stroke-width: 3;
+            stroke-linecap: round;
+            fill: none;
+            stroke-dasharray: 10;
+            animation: flow 1.2s linear infinite;
+            filter: drop-shadow(0 0 4px var(--accent-color));
         }
 
         .path-charge {
@@ -460,16 +526,22 @@ export class JkBmsCoreReactorLayout extends LitElement {
     firstUpdated() {
         this.fetchHistory();
         this._historyInterval = window.setInterval(() => this.fetchHistory(), 60000); // Update every minute
+        window.addEventListener('resize', this._boundUpdateCellFlowLine);
     }
 
     private _navigate(event, entityId: EntityKey, type: "sensor" | "switch" | "number" | "binary_sensor" = "sensor") {
-        navigate(event, this.config, entityId, type);
+        navigate(event, this.config, entityId, type, this.hass);
+    }
+
+    private _navigateTitle(event) {
+        navigateTitle(event, this.hass, this.config);
     }
 
     updated(changedProps: Map<string, any>) {
         if (changedProps.has('hass')) {
             this._updateRealtimeHistory();
         }
+        requestAnimationFrame(this._boundUpdateCellFlowLine);
     }
 
     private _updateRealtimeHistory() {
@@ -524,6 +596,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         if (this._historyInterval) {
             clearInterval(this._historyInterval);
         }
+        window.removeEventListener('resize', this._boundUpdateCellFlowLine);
     }
 
     async fetchHistory() {
@@ -586,11 +659,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
     }
 
     private _resolveEntityId(entityKey: EntityKey): string | undefined {
-        const configValue = this.configOrEnum(entityKey);
-        if (!configValue) return undefined;
-        // Logic must match getState: if regular entity_id (contains dot), use as is.
-        // Otherwise assume it's a suffix and prepend sensor.<prefix>_
-        return configValue.includes('.') ? configValue : `sensor.${this.config.prefix}_${configValue}`;
+        return resolveEntityId(this.hass, this.config, entityKey);
     }
 
     _renderSparkline(entityKey: EntityKey, color: string): TemplateResult {
@@ -683,9 +752,13 @@ export class JkBmsCoreReactorLayout extends LitElement {
         const isDischargingFlow = current < 0;
         const isCharging = this.getState(EntityKey.charging, 0, '', 'switch') === 'on';
         const isDischarging = this.getState(EntityKey.discharging, 0, '', 'switch') === 'on';
+        const isBalancer = this.getState(EntityKey.balancer, 0, '', 'switch') === 'on';
+        const isHeater = this.getState(EntityKey.heater, 0, '', 'switch') === 'on';
 
         const isBalancing = this.getState(EntityKey.balancing, 0, '', 'binary_sensor') === 'on';
         const balancingCurrent = parseFloat(this.getState(EntityKey.balancing_current));
+        const isActivelyBalancing = !isNaN(balancingCurrent) && balancingCurrent !== 0;
+        this.shouldBalance = isActivelyBalancing;
 
         // Stats
         const totalVolts = this.getState(EntityKey.total_voltage);
@@ -730,7 +803,7 @@ export class JkBmsCoreReactorLayout extends LitElement {
         return html`
             <ha-card class="container">
                 ${showTitle ? html`
-                <div class="header clickable" @click=${(e) => this._navigate(e, EntityKey.total_runtime_formatted)}>
+                <div class="header clickable" @click=${(e) => this._navigateTitle(e)}>
                     ${title}
                 </div>    
                 ` : ``}
@@ -759,11 +832,11 @@ export class JkBmsCoreReactorLayout extends LitElement {
 
                     <!-- Reactor (SOC) -->
                     <div class="reactor-container">
-                        <div class="reactor-ring ${(isBalancing && balancingCurrent != 0) ? "reactor-ring-balancing" : "reactor-ring-base"} clickable" 
+                        <div class="reactor-ring ${(isBalancing && isActivelyBalancing) ? "reactor-ring-balancing" : "reactor-ring-base"} clickable"
                              @click=${(e) => this._navigate(e, EntityKey.state_of_charge)}>
                             <div class="soc-label">SoC:</div>
                             <div class="soc-value">${soc}%</div>
-                            ${isBalancing && balancingCurrent != 0 ? 
+                            ${isBalancing && isActivelyBalancing ?
                                     html`<div class="capacity-val capacity-val-balancing clickable"
                                             @click=${(e) => this._navigate(e, EntityKey.balancing_current)}>
                                                 ${localize('html_texts.balancing')}:<br>${this.getState(EntityKey.balancing_current)} A</div>` : 
@@ -772,6 +845,22 @@ export class JkBmsCoreReactorLayout extends LitElement {
                                                 ${localize('html_texts.remaining')}:<br>${this.getState(EntityKey.capacity_remaining, customDecimals)} Ah</div>`
                                 }
                         </div>
+                        ${showButtons ? html`
+                            <div class="reactor-controls">
+                                <div class="reactor-control clickable ${isBalancer ? 'reactor-control-on' : ''}"
+                                     @click=${(e) => this._navigate(e, EntityKey.balancer, 'switch')}>
+                                    <ha-icon icon="mdi:scale-balance"></ha-icon>
+                                    <span>${localize('switches.balance')}: ${isBalancer ? 'ON' : 'OFF'}</span>
+                                </div>
+                                ${this.config.hasHeater == '1' ? html`
+                                    <div class="reactor-control clickable ${isHeater ? 'reactor-control-on' : ''}"
+                                         @click=${(e) => this._navigate(e, EntityKey.heater, 'switch')}>
+                                        <ha-icon icon="mdi:radiator"></ha-icon>
+                                        <span>${localize('switches.heater')}: ${isHeater ? 'ON' : 'OFF'}</span>
+                                    </div>
+                                ` : html``}
+                            </div>
+                        ` : html``}
                     </div>
 
                     <!-- Load Node -->
@@ -893,7 +982,12 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 ${showCells ? html`
                 <div class="cell-grid grid-${this.config.cellColumns ?? 2}">
                     ${this._renderCells(showRes)}
-                </div>` : html``}
+                </div>
+                ${this.shouldBalance ? html`
+                    <svg class="cell-flow-line" id="cell-flow-svg">
+                        <path id="cell-flow-path" />
+                    </svg>
+                ` : html``}` : html``}
                 ${showCardVersion ? html`
                 <div class="cardVersion">
                     <span class="version">
@@ -1128,11 +1222,14 @@ export class JkBmsCoreReactorLayout extends LitElement {
                             (this.config.showResistances === true && this.config.cellColumns > 3) 
                             ? 'vertical' 
                             : this.config.cellOrientation || 'horizontal';
-        const cellClass = orientation === 'vertical' ? 'cell-item cell-item-vertical' : 'cell-item';
+        const balancingClass = isCellBalancing(this.hass, this.config, i) ? 'cell-balancing' : '';
+        const cellClass = orientation === 'vertical'
+            ? `cell-item cell-item-vertical ${balancingClass}`
+            : `cell-item ${balancingClass}`;
         const voltUnit = localize('html_texts.volt');
 
         cells.push(html`
-            <div class="${cellClass}" style="${cellStyle}">
+            <div class="${cellClass}" data-cell-id="${i}" style="${cellStyle}">
                 ${colorMode === 'progress' ? html`
                     <div class="cell-item-bg" style="width: ${percent}%;"></div>` : ''}
                 ${orientation === 'vertical' ? html`
@@ -1156,5 +1253,40 @@ export class JkBmsCoreReactorLayout extends LitElement {
                 `}
             </div>
         `);
+    }
+
+    private _updateCellFlowLine() {
+        const path = this.renderRoot.querySelector('#cell-flow-path') as SVGPathElement;
+        const minEl = this.renderRoot.querySelector(`[data-cell-id="${this.minCellId}"]`);
+        const maxEl = this.renderRoot.querySelector(`[data-cell-id="${this.maxCellId}"]`);
+
+        if (!path || !minEl || !maxEl || !this.shouldBalance) {
+            path?.setAttribute('d', '');
+            return;
+        }
+
+        const svg = this.renderRoot.querySelector('#cell-flow-svg') as SVGSVGElement;
+        if (!svg) return;
+
+        const cardRect = svg.getBoundingClientRect();
+        const minRect = minEl.getBoundingClientRect();
+        const maxRect = maxEl.getBoundingClientRect();
+
+        const from = {
+            x: maxRect.left + maxRect.width / 2 - cardRect.left,
+            y: maxRect.top + maxRect.height / 2 - cardRect.top,
+        };
+        const to = {
+            x: minRect.left + minRect.width / 2 - cardRect.left,
+            y: minRect.top + minRect.height / 2 - cardRect.top,
+        };
+
+        if (from.x === to.x && from.y === to.y) {
+            path.setAttribute('d', '');
+            return;
+        }
+
+        const midX = (from.x + to.x) / 2;
+        path.setAttribute('d', `M ${from.x},${from.y} L ${midX},${from.y} L ${midX},${to.y} L ${to.x},${to.y}`);
     }
 }

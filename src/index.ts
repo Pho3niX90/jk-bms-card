@@ -46,6 +46,7 @@ export class JkBmsCard extends LitElement {
             hasHeater: 0,
             socDecimals: 2,
             customDecimals: 2,
+            titleAction: 'more-info',
             showTitle: true,
             showButtons: true,
             showMain: true,
