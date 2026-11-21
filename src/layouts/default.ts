@@ -456,9 +456,13 @@ export class JkBmsDefaultLayout extends LitElement {
     private _renderError() {
         const state = this.getState(EntityKey.errors, 0);
         if (state.trim().length <= 1 || state == '0') {
-            return html``
+            return html``;
         }
-        return html`<span class="error-message">${state}</span>`
+        return html`
+            <div class="grid grid-1">
+                <div class="center error-message">${state}</div>
+            </div>
+        `;
     }
 
     private _renderTemps(placement): TemplateResult {
