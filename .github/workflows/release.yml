@@ -72,6 +72,7 @@ jobs:
         if: env.is_higher_version == 'true'
         run: |
           npm install --legacy-peer-deps
+          npm test
           npm run build
 
       - name: Commit and push version bump

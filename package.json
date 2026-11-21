@@ -9,7 +9,8 @@
     "lintindexfix": "eslint src/index.ts --fix",
     "lintfixall": "eslint src/*.ts --fix",
     "rollup": "rollup -c",
-    "build": "rollup -c --bundleConfigAsCjs"
+    "build": "rollup -c --bundleConfigAsCjs",
+    "test": "vitest run"
   },
   "repository": {
     "type": "git",
@@ -56,6 +57,7 @@
     "rollup-plugin-serve": "^3.0.0",
     "rollup-plugin-typescript2": "^0.37.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.73.0"
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^3.2.7"
   }
 }

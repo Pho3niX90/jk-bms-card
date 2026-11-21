@@ -16,6 +16,44 @@ The flowline animation is exclusive to the Default Layout and triggers dynamical
 ## Core Reactor
 ![core_reactor2.png](images/core_reactor2.png)
 
+## Bank Overview
+![bank_overview.png](images/bank_overview.png)
+
+Aggregates multiple parallel BMS packs (JK BMS and/or Seplos V3) into one overview card showing capacity-weighted SoC, total power/current, estimated time to full/empty, bank voltage spread, worst cell delta, peak temperature, and expandable per-pack cell drawers:
+
+```yaml
+type: custom:jk-bms-card
+layout: bank-overview
+title: Solar Storage Bank
+deltaVoltageUnit: mV
+deltaWarningMv: 30
+cellCount: 16
+cellColumns: 4
+packs:
+  - name: Pack 1 · JK
+    prefix: jk_bms_1
+  - name: Pack 2 · JK
+    prefix: jk_bms_2
+  - name: Pack 3 · Seplos V3
+    bmsModel: seplos_v3_ble
+    prefix: seplos_bms_v3_ble
+    packIndex: 1
+```
+
+Notes:
+- Summed quantities (`current`, `power`, `remaining`, `capacity`) are deduplicated by resolved entity ID so shared bank-level sensors (such as Seplos V3 BLE) are never counted multiple times.
+- Clicking a pack row expands its inline cell voltage grid; clicking a pack name navigates to `navigationPath` (if set) or its Home Assistant device page; clicking any FET badge opens `more-info`.
+- If `packs` is omitted, the card falls back to rendering the root `prefix` as a single pack.
+
+## BMS Model Presets (Seplos V3)
+Pick a **BMS model** in the card editor (or set `bmsModel` in YAML) to map the card onto the entity names of [syssi/esphome-seplos-bms](https://github.com/syssi/esphome-seplos-bms):
+
+| `bmsModel` | ESPHome config | Default prefix |
+|---|---|---|
+| `jk` (default) | `esphome-jk-bms` | `jk_bms` |
+| `seplos_v3_modbus` | `esp32-seplos-v3-example.yaml` (RS485) | `seplos_bms` |
+| `seplos_v3_ble` | `esp32-seplos-v3-ble-example.yaml` (BLE) | `seplos_bms_v3_ble` |
+
 inspired from: https://github.com/syssi/esphome-jk-bms/discussions/230
 integration from: https://github.com/syssi/esphome-jk-bms/tree/main
 
