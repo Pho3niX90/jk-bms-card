@@ -394,6 +394,11 @@ export class JkBmsBankOverviewLayout extends LitElement {
                 grid-template-columns: 1fr auto;
                 gap: 8px;
             }
+            .expand-btn {
+                grid-row: 1;
+                grid-column: 2;
+                align-self: start;
+            }
             .pack-bar-col,
             .pack-metrics {
                 grid-column: 1 / -1;

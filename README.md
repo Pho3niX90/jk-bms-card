@@ -17,6 +17,8 @@ The flowline animation is exclusive to the Default Layout and triggers dynamical
 ![core_reactor2.png](images/core_reactor2.png)
 
 ## Bank Overview
+![bank_overview.png](images/bank_overview.png)
+
 Aggregates multiple parallel BMS packs (JK BMS and/or Seplos V3) into one overview card showing capacity-weighted SoC, total power/current, estimated time to full/empty, bank voltage spread, worst cell delta, peak temperature, and expandable per-pack cell drawers:
 
 ```yaml
