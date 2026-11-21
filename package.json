@@ -51,15 +51,11 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.2.6",
     "globals": "^17.5.0",
-    "npm": "^11.14.1",
     "prettier": "^3.7.4",
     "rollup": "^4.60.3",
     "rollup-plugin-serve": "^3.0.0",
     "rollup-plugin-typescript2": "^0.37.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0"
-  },
-  "resolutions": {
-    "rollup": "^3.24.0"
   }
 }
