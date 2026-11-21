@@ -1,19 +1,27 @@
 {
   "common": {
     "title": "JK BMS Card",
-    "description": "A customizable Home Assistant card to emulate the JK BMS screen",
+    "description": "A customizable Home Assistant card to emulate the JK BMS screen (also supports Seplos V3 and Multi-Battery Bank Overview)",
     "version": "Version"
   },
   "config": {
     "language": "Language",
     "title": "Title",
+    "titleAction": "Title click action",
+    "bmsModel": "BMS model",
+    "defaultModel": "Default BMS model",
     "prefix": "Prefix of the sensors",
     "batteryName": "Battery name",
+    "deviceId": "Device",
+    "name": "Pack name",
+    "packIndex": "Pack index",
+    "navigationPath": "Navigation path",
     "cellCount": "Number of cells",
     "cellColumns": "Number of columns",
     "cellLayout": "Cell Layout",
     "layout": "Layout",
     "deltaVoltageUnit": "Delta Voltage Unit",
+    "deltaWarningMv": "Delta Warning (mV)",
     "resistanceUnit": "Resistance Unit",
     "cellColorMode": "Cell Color Mode",
     "cellOrientation": "Cell Orientation",
@@ -32,7 +40,13 @@
     "showMainStats": "Stats",
     "showCells": "Cells",
     "showResistances": "Cell R.",
-    "showCardVersion": "Version"
+    "showCardVersion": "Version",
+    "packs": "Battery Packs",
+    "addPack": "Add Pack",
+    "removePack": "Remove",
+    "packsEmptyHint": "No packs added yet — showing the root prefix as a single pack. Click Add Pack to configure multiple packs.",
+    "entitiesFound": "entities found",
+    "inheritModel": "Inherit default model"
   },
   "switches": {
     "charge": "Charge",
@@ -73,5 +87,33 @@
     "charge": "Charge",
     "discharge": "Discharge",
     "remaining": "Remaining"
+  },
+  "bank": {
+    "defaultTitle": "Battery Bank",
+    "packsUnit": "Packs",
+    "partial": "partial",
+    "statusCharging": "Charging",
+    "statusDischarging": "Discharging",
+    "statusIdle": "Idle",
+    "statusOffline": "Offline",
+    "statusFault": "Fault",
+    "online": "Online",
+    "offline": "Offline",
+    "toFull": "to full",
+    "remainingShort": "left",
+    "bankVoltage": "Bank Voltage",
+    "packSpread": "Pack spread",
+    "worstDelta": "Worst Delta",
+    "peakTemp": "Peak Temp",
+    "cellRange": "Cell Range",
+    "packsBalancing": "pack(s) balancing",
+    "balanced": "Balanced",
+    "batteryPacks": "Battery Packs",
+    "inspectHint": "Click pack to inspect cells",
+    "voltShort": "Volt",
+    "fetChg": "CHG",
+    "fetDsg": "DSG",
+    "fetBal": "BAL",
+    "fetHtr": "HTR"
   }
 }
