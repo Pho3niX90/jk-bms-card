@@ -21,30 +21,45 @@ console.groupCollapsed(
 console.log('%c📖 Docs:', 'color: #41cd52; font-weight: bold;', 'https://github.com/Pho3niX90/jk-bms-card');
 console.groupEnd();
 
+const OPTIONAL_PACK_STRING_FIELDS = ['id', 'name', 'prefix', 'deviceId', 'navigationPath'] as const;
+const OPTIONAL_PACK_INT_FIELDS = ['packIndex', 'batteryNumber'] as const;
+
+export const validateCardConfig = (config: JkBmsCardConfig): void => {
+    if (!config || typeof config !== 'object') {
+        throw new Error('Invalid jk-bms-card configuration');
+    }
+
+    if (config.packs !== undefined) {
+        if (!Array.isArray(config.packs)) {
+            throw new Error('`packs` must be an array of pack configurations');
+        }
+        config.packs.forEach((pack, index) => {
+            if (!pack || typeof pack !== 'object' || Array.isArray(pack)) {
+                throw new Error(`packs[${index}] must be an object`);
+            }
+            for (const field of OPTIONAL_PACK_STRING_FIELDS) {
+                const value = pack[field];
+                if (value !== undefined && typeof value !== 'string') {
+                    throw new Error(`packs[${index}].${field} must be a string`);
+                }
+            }
+            for (const field of OPTIONAL_PACK_INT_FIELDS) {
+                const value = pack[field];
+                if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 1)) {
+                    throw new Error(`packs[${index}].${field} must be a positive integer`);
+                }
+            }
+        });
+    }
+};
+
 @customElement(MAIN_NAME)
 export class JkBmsCard extends LitElement {
     @property({ attribute: false }) public hass!: HomeAssistant;
     @property({ attribute: false }) private _config?: JkBmsCardConfig;
 
     public setConfig(config: JkBmsCardConfig): void {
-        if (!config) {
-            throw new Error('Invalid jk-bms-card configuration');
-        }
-
-        if (config.packs !== undefined) {
-            if (!Array.isArray(config.packs)) {
-                throw new Error('`packs` must be an array of pack configurations');
-            }
-            config.packs.forEach((pack, index) => {
-                if (!pack || typeof pack !== 'object') {
-                    throw new Error(`packs[${index}] must be an object`);
-                }
-                if (typeof pack.prefix !== 'string' || pack.prefix.trim().length === 0) {
-                    throw new Error(`packs[${index}] must define a non-empty \`prefix\``);
-                }
-            });
-        }
-
+        validateCardConfig(config);
         this._config = JkBmsCard.getStubConfig();
         this._config = { ...this._config, ...config };
         globalData.cardConfig = this._config;
@@ -98,11 +113,9 @@ export class JkBmsCard extends LitElement {
 
     public getGridOptions() {
         if (this._config?.layout === 'bank-overview') {
-            const packCount = Math.max(this._config.packs?.length ?? 1, 1);
             return {
                 columns: 12,
                 min_columns: 6,
-                rows: Math.min(4 + packCount, 12),
                 min_rows: 3,
             };
         }
@@ -128,12 +141,14 @@ export class JkBmsCard extends LitElement {
     }
 }
 
-const customWindow = window as unknown as { customCards?: Array<Record<string, unknown>> };
-customWindow.customCards = customWindow.customCards || [];
-customWindow.customCards.push({
-    type: MAIN_NAME,
-    name: 'JK BMS Card',
-    preview: true,
-    description: localize('common.description'),
-    configurable: true,
-});
+if (typeof window !== 'undefined') {
+    const customWindow = window as unknown as { customCards?: Array<Record<string, unknown>> };
+    customWindow.customCards = customWindow.customCards || [];
+    customWindow.customCards.push({
+        type: MAIN_NAME,
+        name: 'JK BMS Card',
+        preview: true,
+        description: localize('common.description'),
+        configurable: true,
+    });
+}

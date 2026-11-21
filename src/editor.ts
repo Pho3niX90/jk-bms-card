@@ -2,22 +2,18 @@ import { HomeAssistant, LovelaceCardEditor, LovelaceConfig } from 'custom-card-h
 import { html, LitElement, TemplateResult, css } from 'lit';
 import { EDITOR_NAME, EntityKey } from './const';
 import { customElement, property, state } from 'lit/decorators.js';
-import { JkBmsCardConfig, JkBmsPackConfig } from './interfaces';
+import { JkBmsCardConfig } from './interfaces';
 import { localize } from './localize/localize';
 import { fireEvent } from './helpers/utils';
-import { applyModelDefaults, applyPackModelDefaults, BMS_PRESETS, BmsModel } from './presets';
+import { applyModelDefaults, BMS_PRESETS, BmsModel } from './presets';
 import { countMatchedPackEntities } from './helpers/bank-metrics';
-
-const KNOWN_SENSOR_SUFFIXES = [
-    '_total_voltage',
-    '_state_of_charge',
-    '_delta_cell_voltage',
-    '_delta_voltage',
-    '_cell_voltage_1',
-    '_pack_0_cell_1_voltage',
-    '_mosfet_temperature',
-    '_power_tube_temperature',
-];
+import {
+    addPackToConfig,
+    applyPackEdit,
+    buildPackFormSchema,
+    getBmsModelOptions,
+    normalizeShowHideFlags,
+} from './helpers/editor-helpers';
 
 @customElement(EDITOR_NAME)
 export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
@@ -27,6 +23,12 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
 
     @state() private _dynamicEntitySchema: Array<Record<string, unknown>> = [];
     @state() private _openPackPanels: Set<number> = new Set();
+
+    private _cachedPackSchema?: Array<Record<string, unknown>>;
+    private _cachedPackSchemaLang?: string;
+    private _lastStatesRef?: HomeAssistant['states'];
+    private _lastPacksRef?: JkBmsCardConfig['packs'];
+    private _cachedMatchCounts: number[] = [];
 
     static get styles() {
         return css`
@@ -102,16 +104,20 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                 white-space: nowrap;
             }
             .entity-count-pill.found {
-                color: #41cd52;
+                color: var(--success-color, #41cd52);
                 background: rgba(65, 205, 82, 0.14);
             }
             .pack-form-body {
                 padding: 12px 16px 16px;
-            }
-            .btn-row {
                 display: flex;
-                align-items: center;
-                gap: 6px;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .pack-actions-footer {
+                display: flex;
+                justify-content: flex-end;
+                border-top: 1px solid var(--divider-color, rgba(127, 127, 127, 0.2));
+                padding-top: 10px;
             }
             .action-btn {
                 border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.35));
@@ -126,12 +132,12 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                 border-color: var(--primary-color, #3090c7);
             }
             .remove-btn {
-                border: none;
+                border: 1px solid rgba(244, 67, 54, 0.4);
                 background: transparent;
                 color: var(--error-color, #f44336);
                 cursor: pointer;
-                padding: 4px 6px;
-                border-radius: 4px;
+                padding: 5px 10px;
+                border-radius: 6px;
                 font-size: 12px;
             }
             .packs-empty-hint {
@@ -147,6 +153,8 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
     private readonly _fixedEntities = Object.values(EntityKey).filter(
         key => !key.startsWith('cell_voltage_') && !key.startsWith('cell_resistance_')
     );
+
+    private readonly _computeLabel = (data: { name: string }) => localize(`config.${data.name}`) ?? data.name;
 
     public setConfig(config: JkBmsCardConfig): void {
         this._config = { ...config };
@@ -191,39 +199,20 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         }
     }
 
-    private _normalizeShowHideFlags(config: JkBmsCardConfig): void {
-        const layout = config.layout ?? 'default';
-        const shouldShowMainStats =
-            config.showMain === true && (layout === 'core-reactor' || layout === 'bank-overview');
-        const shouldShowCellsResistances = config.showCells === true;
-
-        if (!shouldShowMainStats && config.showMainStats !== undefined) {
-            delete config.showMainStats;
-        }
-        if (shouldShowMainStats && config.showMainStats === undefined) {
-            config.showMainStats = true;
-        }
-
-        if (!shouldShowCellsResistances && config.showResistances !== undefined) {
-            delete config.showResistances;
-        }
-        if (shouldShowCellsResistances && config.showResistances === undefined) {
-            config.showResistances = true;
-        }
-    }
-
     private _emitConfig(config: JkBmsCardConfig): void {
-        this._normalizeShowHideFlags(config);
-        this._config = config;
+        const normalized = normalizeShowHideFlags(config);
+        this._config = normalized;
         fireEvent(this, 'config-changed', { config: this._config });
     }
 
-    private renderBoolean(label: string, configKey: keyof JkBmsCardConfig) {
+    private renderBoolean(label: string, configKey: keyof JkBmsCardConfig, defaultValue = false) {
+        const raw = this._config?.[configKey];
+        const checked = raw === undefined ? defaultValue : Boolean(raw);
         return html`
             <div class="boolean-row">
                 <span class="label">${label}</span>
                 <ha-switch
-                    .checked=${Boolean(this._config?.[configKey] ?? false)}
+                    .checked=${checked}
                     @change=${(ev: Event) => this._handleSwitchChange(configKey, ev)}
                 ></ha-switch>
             </div>
@@ -238,74 +227,15 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         this._emitConfig(config);
     }
 
-    private _inferPrefixFromDevice(deviceId: string): string | undefined {
-        const entities = (this.hass as unknown as { entities?: Record<string, { device_id?: string }> })?.entities;
-        if (!entities || !deviceId) return undefined;
-
-        for (const [entityId, meta] of Object.entries(entities)) {
-            if (meta?.device_id !== deviceId) continue;
-            const dotIdx = entityId.indexOf('.');
-            if (dotIdx === -1) continue;
-            const objectId = entityId.slice(dotIdx + 1);
-            for (const suffix of KNOWN_SENSOR_SUFFIXES) {
-                if (objectId.endsWith(suffix)) {
-                    const candidate = objectId.slice(0, -suffix.length);
-                    if (candidate.length > 0) return candidate;
-                }
-            }
-        }
-        return undefined;
-    }
-
-    private _suggestNextPrefix(existing: JkBmsPackConfig[]): string {
-        const last = existing[existing.length - 1]?.prefix?.trim();
-        const nextNum = existing.length + 1;
-        if (!last) {
-            const base = this._config?.prefix?.trim() || 'jk_bms';
-            return `${base}_${nextNum}`;
-        }
-        const trailingNumber = last.match(/^(.*?)(\d+)$/);
-        if (trailingNumber) {
-            return `${trailingNumber[1]}${Number(trailingNumber[2]) + 1}`;
-        }
-        return `${last}_${nextNum}`;
-    }
-
     private _addPack(): void {
-        const currentPacks = Array.isArray(this._config.packs) ? [...this._config.packs] : [];
-
-        // Zero-config transition: seed Pack 1 from root config so the first pack isn't lost.
-        if (currentPacks.length === 0 && this._config.prefix?.trim()) {
-            const rootHasHeater =
-                this._config.hasHeater === true || this._config.hasHeater === 1 || this._config.hasHeater === '1';
-            currentPacks.push({
-                name: this._config.batteryName?.trim() || 'Pack 1',
-                prefix: this._config.prefix.trim(),
-                bmsModel: this._config.bmsModel,
-                packIndex: this._config.packIndex ?? this._config.batteryNumber ?? 1,
-                cellCount: this._config.cellCount,
-                tempSensorsCount: this._config.tempSensorsCount,
-                hasHeater: rootHasHeater,
-                deviceId: this._config.deviceId,
-            });
-        }
-
-        const nextIndex = currentPacks.length + 1;
-        currentPacks.push({
-            name: `Pack ${nextIndex}`,
-            prefix: this._suggestNextPrefix(currentPacks),
-            packIndex: nextIndex,
-        });
-
+        const { config, newIndex } = addPackToConfig(this._config);
         const nextOpen = new Set(this._openPackPanels);
-        nextOpen.add(currentPacks.length - 1);
+        nextOpen.add(newIndex);
         this._openPackPanels = nextOpen;
-
-        this._emitConfig({ ...this._config, packs: currentPacks });
+        this._emitConfig(config);
     }
 
-    private _removePack(index: number, ev: Event): void {
-        ev.stopPropagation();
+    private _removePack(index: number): void {
         const currentPacks = Array.isArray(this._config.packs) ? this._config.packs : [];
         const nextPacks = currentPacks.filter((_, i) => i !== index);
         const nextOpen = new Set<number>();
@@ -314,10 +244,18 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
             else if (openIdx > index) nextOpen.add(openIdx - 1);
         }
         this._openPackPanels = nextOpen;
-        this._emitConfig({ ...this._config, packs: nextPacks });
+
+        const nextConfig: JkBmsCardConfig = { ...this._config };
+        if (nextPacks.length === 0) {
+            delete nextConfig.packs;
+        } else {
+            nextConfig.packs = nextPacks;
+        }
+        this._emitConfig(nextConfig);
     }
 
     private _togglePackPanel(index: number, expanded: boolean): void {
+        if (this._openPackPanels.has(index) === expanded) return;
         const next = new Set(this._openPackPanels);
         if (expanded) next.add(index);
         else next.delete(index);
@@ -325,40 +263,38 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
     }
 
     private _packValueChanged(index: number, ev: CustomEvent): void {
-        const currentPacks = Array.isArray(this._config.packs) ? this._config.packs : [];
-        const prevPack = currentPacks[index];
-        if (!prevPack) return;
-
         const incoming = ev.detail.value as Record<string, unknown>;
-        let updated: JkBmsPackConfig = { ...prevPack, ...(incoming as Partial<JkBmsPackConfig>) };
+        const updated = applyPackEdit(this._config, index, incoming, this.hass);
+        this._emitConfig(updated);
+    }
 
-        if (incoming.bmsModel === '__inherit__') {
-            delete updated.bmsModel;
-        } else if (updated.bmsModel && updated.bmsModel !== prevPack.bmsModel) {
-            updated = applyPackModelDefaults(updated, prevPack.bmsModel);
+    private _getPackFormSchema(): Array<Record<string, unknown>> {
+        const langKey = `${this._config?.language ?? 'auto'}:${this.hass?.language ?? ''}`;
+        if (!this._cachedPackSchema || this._cachedPackSchemaLang !== langKey) {
+            const options = getBmsModelOptions(localize('config.inheritModel'));
+            this._cachedPackSchema = buildPackFormSchema(options);
+            this._cachedPackSchemaLang = langKey;
         }
+        return this._cachedPackSchema;
+    }
 
-        if (typeof incoming.deviceId === 'string' && incoming.deviceId && incoming.deviceId !== prevPack.deviceId) {
-            const inferred = this._inferPrefixFromDevice(incoming.deviceId);
-            if (inferred) {
-                updated = { ...updated, prefix: inferred };
-            }
+    private _getPackMatchCounts(): number[] {
+        const packs = Array.isArray(this._config.packs) ? this._config.packs : [];
+        if (this._lastStatesRef === this.hass?.states && this._lastPacksRef === this._config.packs) {
+            return this._cachedMatchCounts;
         }
-
-        if (!updated.prefix?.trim()) {
-            updated = { ...updated, prefix: prevPack.prefix };
-        }
-
-        const nextPacks = currentPacks.map((p, i) => (i === index ? updated : p));
-        this._emitConfig({ ...this._config, packs: nextPacks });
+        this._lastStatesRef = this.hass?.states;
+        this._lastPacksRef = this._config.packs;
+        this._cachedMatchCounts = packs.map((pack, index) =>
+            countMatchedPackEntities(this.hass, this._config, pack, index)
+        );
+        return this._cachedMatchCounts;
     }
 
     private _renderPacksEditor(): TemplateResult {
         const packs = Array.isArray(this._config.packs) ? this._config.packs : [];
-        const modelOptions = [
-            { label: localize('config.inheritModel'), value: '__inherit__' },
-            ...Object.entries(BMS_PRESETS).map(([value, preset]) => ({ label: preset.label, value })),
-        ];
+        const packSchema = this._getPackFormSchema();
+        const matchCounts = this._getPackMatchCounts();
 
         return html`
             <div class="packs-section">
@@ -373,7 +309,7 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                     ? html`<div class="packs-empty-hint">${localize('config.packsEmptyHint')}</div>`
                     : packs.map((pack, index) => {
                           const isOpen = this._openPackPanels.has(index);
-                          const matched = countMatchedPackEntities(this.hass, this._config, pack, index);
+                          const matched = matchCounts[index] ?? 0;
                           const formData = {
                               ...pack,
                               bmsModel: pack.bmsModel ?? '__inherit__',
@@ -384,7 +320,10 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                   outlined
                                   .expanded=${isOpen}
                                   @expanded-changed=${(e: CustomEvent) =>
-                                      this._togglePackPanel(index, Boolean(e.detail?.value))}
+                                      this._togglePackPanel(
+                                          index,
+                                          Boolean(e.detail?.expanded ?? e.detail?.value)
+                                      )}
                               >
                                   <div slot="header" class="pack-panel-header">
                                       <div class="pack-header-meta">
@@ -393,18 +332,9 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                           </span>
                                           <span class="pack-header-prefix">${pack.prefix}</span>
                                       </div>
-                                      <div class="btn-row">
-                                          <span class="entity-count-pill ${matched > 0 ? 'found' : ''}">
-                                              ${matched} ${localize('config.entitiesFound')}
-                                          </span>
-                                          <button
-                                              type="button"
-                                              class="remove-btn"
-                                              @click=${(e: Event) => this._removePack(index, e)}
-                                          >
-                                              ${localize('config.removePack')}
-                                          </button>
-                                      </div>
+                                      <span class="entity-count-pill ${matched > 0 ? 'found' : ''}">
+                                          ${matched} ${localize('config.entitiesFound')}
+                                      </span>
                                   </div>
                                   ${isOpen
                                       ? html`
@@ -412,68 +342,20 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                                 <ha-form
                                                     .hass=${this.hass}
                                                     .data=${formData}
-                                                    .computeLabel=${this._computeLabelCallback.bind(this)}
-                                                    .schema=${[
-                                                        {
-                                                            type: 'grid',
-                                                            column_min_width: '180px',
-                                                            schema: [
-                                                                { name: 'name', selector: { text: {} } },
-                                                                { name: 'prefix', selector: { text: {} } },
-                                                            ],
-                                                        },
-                                                        {
-                                                            type: 'grid',
-                                                            column_min_width: '180px',
-                                                            schema: [
-                                                                {
-                                                                    name: 'bmsModel',
-                                                                    selector: {
-                                                                        select: {
-                                                                            mode: 'dropdown',
-                                                                            options: modelOptions,
-                                                                        },
-                                                                    },
-                                                                },
-                                                                {
-                                                                    name: 'packIndex',
-                                                                    selector: {
-                                                                        number: { min: 1, max: 16, step: 1, mode: 'box' },
-                                                                    },
-                                                                },
-                                                            ],
-                                                        },
-                                                        {
-                                                            type: 'grid',
-                                                            column_min_width: '180px',
-                                                            schema: [
-                                                                { name: 'deviceId', selector: { device: {} } },
-                                                                { name: 'navigationPath', selector: { text: {} } },
-                                                            ],
-                                                        },
-                                                        {
-                                                            type: 'grid',
-                                                            column_min_width: '140px',
-                                                            schema: [
-                                                                {
-                                                                    name: 'cellCount',
-                                                                    selector: {
-                                                                        number: { min: 2, max: 48, step: 1, mode: 'box' },
-                                                                    },
-                                                                },
-                                                                {
-                                                                    name: 'tempSensorsCount',
-                                                                    selector: {
-                                                                        number: { min: 0, max: 4, step: 1, mode: 'box' },
-                                                                    },
-                                                                },
-                                                                { name: 'hasHeater', selector: { boolean: {} } },
-                                                            ],
-                                                        },
-                                                    ]}
+                                                    .computeLabel=${this._computeLabel}
+                                                    .schema=${packSchema}
                                                     @value-changed=${(e: CustomEvent) =>
                                                         this._packValueChanged(index, e)}
                                                 ></ha-form>
+                                                <div class="pack-actions-footer">
+                                                    <button
+                                                        type="button"
+                                                        class="remove-btn"
+                                                        @click=${() => this._removePack(index)}
+                                                    >
+                                                        ${localize('config.removePack')}
+                                                    </button>
+                                                </div>
                                             </div>
                                         `
                                       : ''}
@@ -492,6 +374,8 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         const layout = this._config.layout ?? 'default';
         const isBankOverview = layout === 'bank-overview';
         const hasConfiguredPacks = isBankOverview && Array.isArray(this._config.packs) && this._config.packs.length > 0;
+        const effectiveShowMain = this._config.showMain !== false;
+        const effectiveShowCells = this._config.showCells !== false;
 
         const entityConfigs = [
             { name: 'cell_prefix', selector: { text: {} } },
@@ -586,6 +470,14 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                 ? [
                                       { name: 'prefix', selector: { text: {} } },
                                       { name: 'batteryName', selector: { text: {} } },
+                                      ...(this._config.bmsModel === 'seplos_v3_ble'
+                                          ? [
+                                                {
+                                                    name: 'packIndex',
+                                                    selector: { number: { min: 1, max: 16, step: 1, mode: 'box' } },
+                                                },
+                                            ]
+                                          : []),
                                       { name: 'deviceId', selector: { text: {} } },
                                   ]
                                 : []),
@@ -782,15 +674,15 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
         const showButtonsToggle =
             layout === 'default' ||
             layout === 'bank-overview' ||
-            (this._config?.showMain === true && layout === 'core-reactor');
+            (effectiveShowMain && layout === 'core-reactor');
         const showMainStatsToggle =
-            this._config?.showMain === true && (layout === 'core-reactor' || layout === 'bank-overview');
+            effectiveShowMain && (layout === 'core-reactor' || layout === 'bank-overview');
 
         return html`
             <ha-form
                 .hass=${this.hass}
                 .data=${this._config}
-                .computeLabel=${this._computeLabelCallback.bind(this)}
+                .computeLabel=${this._computeLabel}
                 .schema=${schema}
                 @value-changed=${this._valueChanged.bind(this)}
             ></ha-form>
@@ -807,24 +699,24 @@ export class JkBmsCardEditor extends LitElement implements LovelaceCardEditor {
                                 grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
                                 gap: 16px;"
                 >
-                    ${this.renderBoolean(localize('config.showTitle'), 'showTitle')}
-                    ${showButtonsToggle ? this.renderBoolean(localize('config.showButtons'), 'showButtons') : ''}
-                    ${this.renderBoolean(localize('config.showMain'), 'showMain')}
-                    ${this._config?.showMain === true && layout === 'default'
-                        ? this.renderBoolean(localize('config.showCondensed'), 'showCondensed')
+                    ${this.renderBoolean(localize('config.showTitle'), 'showTitle', true)}
+                    ${showButtonsToggle ? this.renderBoolean(localize('config.showButtons'), 'showButtons', true) : ''}
+                    ${this.renderBoolean(localize('config.showMain'), 'showMain', true)}
+                    ${effectiveShowMain && layout === 'default'
+                        ? this.renderBoolean(localize('config.showCondensed'), 'showCondensed', true)
                         : ''}
-                    ${showMainStatsToggle ? this.renderBoolean(localize('config.showMainStats'), 'showMainStats') : ''}
-                    ${this.renderBoolean(localize('config.showCells'), 'showCells')}
-                    ${this._config?.showCells === true
-                        ? this.renderBoolean(localize('config.showResistances'), 'showResistances')
+                    ${showMainStatsToggle
+                        ? this.renderBoolean(localize('config.showMainStats'), 'showMainStats', true)
                         : ''}
-                    ${this.renderBoolean(localize('config.showCardVersion'), 'showCardVersion')}
+                    ${this.renderBoolean(localize('config.showCells'), 'showCells', true)}
+                    ${effectiveShowCells
+                        ? this.renderBoolean(localize('config.showResistances'), 'showResistances', true)
+                        : ''}
+                    ${this.renderBoolean(localize('config.showCardVersion'), 'showCardVersion', false)}
                 </div>
             </ha-expansion-panel>
         `;
     }
-
-    private _computeLabelCallback = (data: { name: string }) => localize(`config.${data.name}`) ?? data.name;
 
     private _valueChanged(ev: CustomEvent): void {
         const previousModel = this._config?.bmsModel as BmsModel | undefined;

@@ -1,13 +1,14 @@
 import { css, html, LitElement, PropertyValues, TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { HomeAssistant, navigate as navigatePath } from 'custom-card-helpers';
-import { JkBmsCardConfig } from '../interfaces';
+import { JkBmsCardConfig, JkBmsPackConfig } from '../interfaces';
 import { localize } from '../localize/localize';
 import { globalData } from '../helpers/globals';
 import { formatValue, getTemperatureColor, navigateEntityId } from '../helpers/utils';
 import {
     aggregateBankMetrics,
     BankSnapshot,
+    buildPackConfig,
     CellSnapshot,
     collectWatchedEntityIds,
     computeStablePackKeys,
@@ -19,6 +20,8 @@ import {
 } from '../helpers/bank-metrics';
 import { version } from '../../package.json';
 
+type HassEntitiesMap = Record<string, { device_id?: string }>;
+
 @customElement('jk-bms-bank-overview-layout')
 export class JkBmsBankOverviewLayout extends LitElement {
     @property({ attribute: false }) public hass!: HomeAssistant;
@@ -27,21 +30,27 @@ export class JkBmsBankOverviewLayout extends LitElement {
     @state() private _expandedPacks: Set<string> = new Set();
 
     private _watchedEntityIds: string[] = [];
+    private _effectivePacks: JkBmsPackConfig[] = [];
+    private _isFallback = false;
+    private _stableKeys: string[] = [];
+    private _cachedPackConfigs: JkBmsCardConfig[] = [];
     private readonly VERSION = version;
 
     static styles = css`
         :host {
             display: block;
-            --bank-success: #41cd52;
-            --bank-info: #3090c7;
-            --bank-warning: #ff9800;
-            --bank-danger: #f44336;
+            --bank-success: var(--success-color, #41cd52);
+            --bank-info: var(--info-color, #3090c7);
+            --bank-warning: var(--warning-color, #ff9800);
+            --bank-danger: var(--error-color, #f44336);
+            --bank-pill-bg: var(--primary-color, #195569);
             --bank-panel-bg: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
             --bank-border: var(--ha-card-border-width, 1px) solid
                 var(--ha-card-border-color, var(--divider-color, rgba(127, 127, 127, 0.2)));
         }
 
         ha-card {
+            container-type: inline-size;
             padding: 16px;
             display: flex;
             flex-direction: column;
@@ -267,7 +276,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
             gap: 8px;
         }
 
-        @media (max-width: 540px) {
+        @container (max-width: 520px) {
             .kpi-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
@@ -282,6 +291,22 @@ export class JkBmsBankOverviewLayout extends LitElement {
             flex-direction: column;
             gap: 2px;
             min-width: 0;
+            text-align: left;
+            font: inherit;
+            color: inherit;
+        }
+
+        button.kpi {
+            cursor: pointer;
+        }
+
+        button.kpi:hover {
+            border-color: var(--bank-info);
+        }
+
+        button.kpi:focus-visible {
+            outline: 2px solid var(--bank-info);
+            outline-offset: 1px;
         }
 
         .kpi-label {
@@ -358,20 +383,13 @@ export class JkBmsBankOverviewLayout extends LitElement {
             align-items: center;
             gap: 10px;
             cursor: pointer;
-            user-select: none;
-            outline: none;
         }
 
         .pack-row:hover {
             background: rgba(127, 127, 127, 0.06);
         }
 
-        .pack-row:focus-visible {
-            box-shadow: inset 0 0 0 2px var(--primary-color, var(--bank-info));
-            border-radius: 9px;
-        }
-
-        @media (max-width: 540px) {
+        @container (max-width: 520px) {
             .pack-row {
                 grid-template-columns: 1fr auto;
                 gap: 8px;
@@ -407,7 +425,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
             white-space: nowrap;
         }
 
-        .pack-name-btn {
+        .inline-btn {
             background: none;
             border: none;
             padding: 0;
@@ -415,7 +433,16 @@ export class JkBmsBankOverviewLayout extends LitElement {
             font: inherit;
             color: inherit;
             cursor: pointer;
-            text-align: left;
+            text-align: inherit;
+        }
+
+        .inline-btn:focus-visible {
+            outline: 2px solid var(--bank-info);
+            outline-offset: 2px;
+            border-radius: 3px;
+        }
+
+        .pack-name-btn {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -475,6 +502,12 @@ export class JkBmsBankOverviewLayout extends LitElement {
             color: var(--bank-danger);
             border-color: rgba(244, 67, 54, 0.4);
             background: rgba(244, 67, 54, 0.1);
+        }
+
+        .fet.unavailable {
+            color: var(--secondary-text-color);
+            border-style: dashed;
+            opacity: 0.7;
         }
 
         .fet.bal {
@@ -548,29 +581,47 @@ export class JkBmsBankOverviewLayout extends LitElement {
             color: var(--secondary-text-color);
         }
 
-        .chevron {
+        .expand-btn {
+            background: none;
+            border: none;
+            padding: 4px;
+            margin: -4px;
             color: var(--secondary-text-color);
-            transition: transform 0.15s ease;
+            cursor: pointer;
             display: flex;
             align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: transform 0.15s ease, background 0.15s ease;
         }
 
-        .chevron ha-icon {
+        .expand-btn:hover {
+            background: rgba(127, 127, 127, 0.12);
+        }
+
+        .expand-btn:focus-visible {
+            outline: 2px solid var(--bank-info);
+            outline-offset: 1px;
+        }
+
+        .expand-btn ha-icon {
             --mdc-icon-size: 20px;
         }
 
-        .pack-card.open .chevron {
+        .pack-card.open .expand-btn {
             transform: rotate(180deg);
         }
 
         /* Inline Pack Error Strip (centered) */
         .pack-error {
+            width: 100%;
             padding: 6px 12px;
             text-align: center;
             font-size: 0.78rem;
             font-weight: 500;
             color: var(--bank-danger);
             background: rgba(244, 67, 54, 0.1);
+            border: none;
             border-top: 1px solid rgba(244, 67, 54, 0.25);
         }
 
@@ -629,7 +680,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
             grid-template-columns: repeat(8, minmax(0, 1fr));
         }
 
-        @media (max-width: 520px) {
+        @container (max-width: 500px) {
             .grid-3,
             .grid-4,
             .grid-5,
@@ -684,8 +735,8 @@ export class JkBmsBankOverviewLayout extends LitElement {
             font-weight: 700;
             padding: 1px 5px;
             border-radius: 999px;
-            background: #195569;
-            color: #e4f3f8;
+            background: var(--bank-pill-bg);
+            color: var(--text-primary-color, #e4f3f8);
             flex-shrink: 0;
         }
 
@@ -722,10 +773,6 @@ export class JkBmsBankOverviewLayout extends LitElement {
             color: var(--secondary-text-color);
         }
 
-        .clickable {
-            cursor: pointer;
-        }
-
         .card-version {
             text-align: right;
             font-style: italic;
@@ -736,6 +783,13 @@ export class JkBmsBankOverviewLayout extends LitElement {
 
     protected willUpdate(changedProps: PropertyValues): void {
         if (changedProps.has('config') && this.config) {
+            const { packs, isFallback } = resolveEffectivePacks(this.config);
+            this._effectivePacks = packs;
+            this._isFallback = isFallback;
+            this._stableKeys = computeStablePackKeys(packs);
+            this._cachedPackConfigs = packs.map((pack, idx) =>
+                buildPackConfig(this.config, pack, idx, isFallback)
+            );
             this._watchedEntityIds = collectWatchedEntityIds(this.config);
         }
     }
@@ -746,6 +800,18 @@ export class JkBmsBankOverviewLayout extends LitElement {
             if (!oldHass || !this.hass || this._watchedEntityIds.length === 0) {
                 return true;
             }
+
+            const oldEntities = (oldHass as unknown as { entities?: HassEntitiesMap })?.entities;
+            const newEntities = (this.hass as unknown as { entities?: HassEntitiesMap })?.entities;
+            if (oldEntities !== newEntities) {
+                for (let i = 0; i < this._watchedEntityIds.length; i++) {
+                    const id = this._watchedEntityIds[i];
+                    if (oldEntities?.[id]?.device_id !== newEntities?.[id]?.device_id) {
+                        return true;
+                    }
+                }
+            }
+
             const oldStates = oldHass.states;
             const newStates = this.hass.states;
             if (oldStates === newStates) return false;
@@ -770,11 +836,12 @@ export class JkBmsBankOverviewLayout extends LitElement {
         this._expandedPacks = next;
     }
 
-    private _handleRowKeydown(ev: KeyboardEvent, packKey: string): void {
-        if (ev.key === 'Enter' || ev.key === ' ') {
-            ev.preventDefault();
-            this._togglePack(packKey);
+    private _handleRowClick(ev: Event, packKey: string): void {
+        const target = ev.target as HTMLElement | null;
+        if (target?.closest('button, a, [role="button"]')) {
+            return;
         }
+        this._togglePack(packKey);
     }
 
     private _handlePackNameClick(ev: Event, pack: PackSnapshot): void {
@@ -808,15 +875,42 @@ export class JkBmsBankOverviewLayout extends LitElement {
         return 'c-muted';
     }
 
-    private _renderFetBadge(fet: FetState, label: string, isBalancingActive = false): TemplateResult {
+    private _renderInteractiveValue(
+        content: string | TemplateResult,
+        entityId: string | undefined,
+        extraClass = '',
+        style = ''
+    ): TemplateResult {
+        if (!entityId) {
+            return html`<span class="${extraClass}" style="${style}">${content}</span>`;
+        }
+        return html`
+            <button
+                type="button"
+                class="inline-btn ${extraClass}"
+                style="${style}"
+                @click=${(e: Event) => navigateEntityId(e, entityId)}
+            >
+                ${content}
+            </button>
+        `;
+    }
+
+    private _renderFetBadge(
+        fet: FetState,
+        label: string,
+        fullName: string,
+        isBalancingActive = false
+    ): TemplateResult {
         if (!fet.exists) return html``;
-        const cls = isBalancingActive ? 'bal' : fet.isOn ? 'on' : 'off';
+        const statusText = fet.isUnavailable ? 'unavailable' : fet.isOn ? 'on' : 'off';
+        const cls = fet.isUnavailable ? 'unavailable' : isBalancingActive ? 'bal' : fet.isOn ? 'on' : 'off';
         return html`
             <button
                 type="button"
                 class="fet ${cls}"
+                aria-label="${fullName}: ${statusText}"
                 @click=${(e: Event) => navigateEntityId(e, fet.entityId)}
-                @keydown=${(e: KeyboardEvent) => e.stopPropagation()}
             >
                 ${label}
             </button>
@@ -891,6 +985,8 @@ export class JkBmsBankOverviewLayout extends LitElement {
         const voltClass = cell.isMin ? 'c-warning' : cell.isMax ? 'c-info' : '';
         const showRes = this.config.showResistances === true && cell.resistance !== null;
         const resUnit = this.config.resistanceUnit ?? cell.resistanceUnit;
+        const voltText =
+            cell.voltageV !== null ? `${cell.voltageV.toFixed(3)} ${localize('html_texts.volt')}` : '—';
 
         return html`
             <div class="${classes}" style="${style}">
@@ -899,45 +995,36 @@ export class JkBmsBankOverviewLayout extends LitElement {
                     : ''}
                 <span class="cell-num">${String(cell.index).padStart(2, '0')}</span>
                 <div class="cell-values">
-                    <span
-                        class="clickable ${voltClass}"
-                        @click=${(e: Event) => navigateEntityId(e, cell.voltageEntityId)}
-                    >
-                        ${cell.voltageV !== null ? `${cell.voltageV.toFixed(3)} ${localize('html_texts.volt')}` : '—'}
-                    </span>
+                    ${this._renderInteractiveValue(voltText, cell.voltageEntityId, voltClass)}
                     ${showRes
-                        ? html`
-                              <span
-                                  class="cell-res clickable"
-                                  @click=${(e: Event) => navigateEntityId(e, cell.resistanceEntityId)}
-                              >
-                                  ${formatValue(cell.resistanceUnit, resUnit, cell.resistance!)}
-                              </span>
-                          `
+                        ? this._renderInteractiveValue(
+                              formatValue(cell.resistanceUnit, resUnit, cell.resistance!),
+                              cell.resistanceEntityId,
+                              'cell-res'
+                          )
                         : ''}
                 </div>
             </div>
         `;
     }
 
-    private _renderPackDrawer(pack: PackSnapshot): TemplateResult {
+    private _renderPackDrawer(pack: PackSnapshot, drawerId: string): TemplateResult {
         const customDecimals = this.config.customDecimals ?? 1;
         const showCells = this.config.showCells !== false;
         const cols = Math.min(Math.max(this.config.cellColumns ?? 4, 1), 8);
 
         return html`
-            <div class="pack-drawer">
+            <div class="pack-drawer" id="${drawerId}">
                 <div class="drawer-meta">
                     ${pack.remainingAh !== null || pack.capacityAh !== null
                         ? html`
                               <span>
                                   ${localize('html_texts.remaining')}:
-                                  <strong
-                                      class="clickable"
-                                      @click=${(e: Event) => navigateEntityId(e, pack.remainingAhEntityId)}
-                                  >
-                                      ${pack.remainingAh !== null ? pack.remainingAh.toFixed(customDecimals) : '—'}
-                                      ${pack.capacityAh !== null ? ` / ${pack.capacityAh.toFixed(0)}` : ''} Ah
+                                  <strong>
+                                      ${this._renderInteractiveValue(
+                                          `${pack.remainingAh !== null ? pack.remainingAh.toFixed(customDecimals) : '—'}${pack.capacityAh !== null ? ` / ${pack.capacityAh.toFixed(0)}` : ''} Ah`,
+                                          pack.remainingAhEntityId
+                                      )}
                                   </strong>
                               </span>
                           `
@@ -946,11 +1033,8 @@ export class JkBmsBankOverviewLayout extends LitElement {
                         ? html`
                               <span>
                                   ${localize('stats.cycles')}
-                                  <strong
-                                      class="clickable"
-                                      @click=${(e: Event) => navigateEntityId(e, pack.cyclesEntityId)}
-                                  >
-                                      ${pack.cycles.toFixed(0)}
+                                  <strong>
+                                      ${this._renderInteractiveValue(pack.cycles.toFixed(0), pack.cyclesEntityId)}
                                   </strong>
                               </span>
                           `
@@ -967,14 +1051,16 @@ export class JkBmsBankOverviewLayout extends LitElement {
                         ? html`
                               <span>
                                   ${localize('html_texts.balancing')}:
-                                  <strong
-                                      class="c-warning clickable"
-                                      @click=${(e: Event) => navigateEntityId(e, pack.balancingCurrentEntityId)}
-                                  >
-                                      ${this._formatSigned(pack.balancingCurrent, 1)} A
-                                      ${pack.maxCellId && pack.minCellId
-                                          ? ` (C${String(pack.maxCellId).padStart(2, '0')} → C${String(pack.minCellId).padStart(2, '0')})`
-                                          : ''}
+                                  <strong class="c-warning">
+                                      ${this._renderInteractiveValue(
+                                          `${this._formatSigned(pack.balancingCurrent, 1)} A${
+                                              pack.maxCellId && pack.minCellId
+                                                  ? ` (C${String(pack.maxCellId).padStart(2, '0')} → C${String(pack.minCellId).padStart(2, '0')})`
+                                                  : ''
+                                          }`,
+                                          pack.balancingCurrentEntityId,
+                                          'c-warning'
+                                      )}
                                   </strong>
                               </span>
                           `
@@ -983,12 +1069,13 @@ export class JkBmsBankOverviewLayout extends LitElement {
                         t => html`
                             <span>
                                 ${t.label}:
-                                <strong
-                                    class="clickable"
-                                    style="color: ${getTemperatureColor(t.value, t.unit)};"
-                                    @click=${(e: Event) => navigateEntityId(e, t.entityId)}
-                                >
-                                    ${t.value.toFixed(1)} ${t.unit}
+                                <strong>
+                                    ${this._renderInteractiveValue(
+                                        `${t.value.toFixed(1)} ${t.unit}`,
+                                        t.entityId,
+                                        '',
+                                        `color: ${getTemperatureColor(t.value, t.unit)};`
+                                    )}
                                 </strong>
                             </span>
                         `
@@ -1008,6 +1095,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
 
     private _renderPackRow(pack: PackSnapshot, deltaWarningMv: number): TemplateResult {
         const isOpen = this._expandedPacks.has(pack.key);
+        const drawerId = `pack-drawer-${pack.index}`;
         const socDecimals = this.config.socDecimals ?? 1;
         const showButtons = this.config.showButtons !== false;
         const socPct = pack.soc !== null ? Math.max(0, Math.min(100, pack.soc)) : 0;
@@ -1037,16 +1125,20 @@ export class JkBmsBankOverviewLayout extends LitElement {
                 ? `${localize('bank.fetBal')} ${this._formatSigned(pack.balancingCurrent, 1)}A`
                 : localize('bank.fetBal');
 
+        const socText =
+            pack.soc !== null
+                ? `${pack.soc.toFixed(socDecimals)}%`
+                : pack.isOnline
+                  ? '—'
+                  : localize('bank.offline');
+
+        const powerText = `${pack.power !== null ? `${this._formatSigned(pack.power, 0)} W` : '—'}${
+            pack.current !== null ? ` · ${this._formatSigned(pack.current, 1)} A` : ''
+        }`;
+
         return html`
             <div class="${cardClasses}">
-                <div
-                    class="pack-row"
-                    role="button"
-                    tabindex="0"
-                    aria-expanded="${String(isOpen)}"
-                    @click=${() => this._togglePack(pack.key)}
-                    @keydown=${(e: KeyboardEvent) => this._handleRowKeydown(e, pack.key)}
-                >
+                <div class="pack-row" @click=${(e: Event) => this._handleRowClick(e, pack.key)}>
                     <div class="pack-id">
                         <div class="pack-name-line">
                             <span class="status-dot ${dotClass}"></span>
@@ -1054,9 +1146,8 @@ export class JkBmsBankOverviewLayout extends LitElement {
                                 ? html`
                                       <button
                                           type="button"
-                                          class="pack-name-btn"
+                                          class="inline-btn pack-name-btn"
                                           @click=${(e: Event) => this._handlePackNameClick(e, pack)}
-                                          @keydown=${(e: KeyboardEvent) => e.stopPropagation()}
                                       >
                                           ${pack.name}
                                       </button>
@@ -1066,14 +1157,27 @@ export class JkBmsBankOverviewLayout extends LitElement {
                         ${showButtons
                             ? html`
                                   <div class="fets">
-                                      ${this._renderFetBadge(pack.fets.charging, localize('bank.fetChg'))}
-                                      ${this._renderFetBadge(pack.fets.discharging, localize('bank.fetDsg'))}
+                                      ${this._renderFetBadge(
+                                          pack.fets.charging,
+                                          localize('bank.fetChg'),
+                                          localize('switches.charge')
+                                      )}
+                                      ${this._renderFetBadge(
+                                          pack.fets.discharging,
+                                          localize('bank.fetDsg'),
+                                          localize('switches.discharge')
+                                      )}
                                       ${this._renderFetBadge(
                                           pack.fets.balancer,
                                           balLabel,
+                                          localize('switches.balance'),
                                           pack.isBalancing && pack.fets.balancer.exists
                                       )}
-                                      ${this._renderFetBadge(pack.fets.heater, localize('bank.fetHtr'))}
+                                      ${this._renderFetBadge(
+                                          pack.fets.heater,
+                                          localize('bank.fetHtr'),
+                                          localize('switches.heater')
+                                      )}
                                   </div>
                               `
                             : ''}
@@ -1081,20 +1185,12 @@ export class JkBmsBankOverviewLayout extends LitElement {
 
                     <div class="pack-bar-col">
                         <div class="pack-bar-top">
-                            <span
-                                class="pack-soc-val clickable"
-                                @click=${(e: Event) => navigateEntityId(e, pack.socEntityId)}
-                            >
-                                ${pack.soc !== null ? `${pack.soc.toFixed(socDecimals)}%` : localize('bank.offline')}
-                            </span>
-                            <span
-                                class="clickable ${this._powerClass(pack.current, 0.2)}"
-                                @click=${(e: Event) =>
-                                    navigateEntityId(e, pack.powerDerived ? pack.currentEntityId : pack.powerEntityId)}
-                            >
-                                ${pack.power !== null ? `${this._formatSigned(pack.power, 0)} W` : '—'}
-                                ${pack.current !== null ? ` · ${this._formatSigned(pack.current, 1)} A` : ''}
-                            </span>
+                            ${this._renderInteractiveValue(socText, pack.socEntityId, 'pack-soc-val')}
+                            ${this._renderInteractiveValue(
+                                powerText,
+                                pack.powerDerived ? pack.currentEntityId : pack.powerEntityId,
+                                this._powerClass(pack.current, 0.2)
+                            )}
                         </div>
                         <div class="mini-track">
                             <div
@@ -1107,55 +1203,64 @@ export class JkBmsBankOverviewLayout extends LitElement {
                     <div class="pack-metrics">
                         <div class="pm-item">
                             <span class="pm-label">${localize('bank.voltShort')}</span>
-                            <span
-                                class="clickable"
-                                @click=${(e: Event) => navigateEntityId(e, pack.voltageEntityId)}
-                            >
-                                ${pack.voltage !== null
+                            ${this._renderInteractiveValue(
+                                pack.voltage !== null
                                     ? `${pack.voltage.toFixed(2)} ${localize('html_texts.volt')}`
-                                    : '—'}
-                            </span>
+                                    : '—',
+                                pack.voltageEntityId
+                            )}
                         </div>
                         <div class="pm-item">
                             <span class="pm-label">${localize('html_texts.delta')}</span>
-                            <span
-                                class="clickable ${isDeltaWarn ? 'c-warning' : pack.deltaMv !== null ? 'c-success' : 'c-muted'}"
-                                @click=${(e: Event) => navigateEntityId(e, pack.deltaEntityId)}
-                            >
-                                ${this._formatDelta(pack.deltaMv)}
-                            </span>
+                            ${this._renderInteractiveValue(
+                                this._formatDelta(pack.deltaMv),
+                                pack.deltaEntityId,
+                                isDeltaWarn ? 'c-warning' : pack.deltaMv !== null ? 'c-success' : 'c-muted'
+                            )}
                         </div>
                         <div class="pm-item">
                             <span class="pm-label">${localize('html_texts.temperature_sensor')}</span>
-                            <span
-                                class="clickable"
-                                style="${pack.peakTemp
+                            ${this._renderInteractiveValue(
+                                pack.peakTemp ? `${pack.peakTemp.value.toFixed(1)} ${pack.peakTemp.unit}` : '—',
+                                pack.peakTemp?.entityId,
+                                '',
+                                pack.peakTemp
                                     ? `color: ${getTemperatureColor(pack.peakTemp.value, pack.peakTemp.unit)};`
-                                    : ''}"
-                                @click=${(e: Event) => navigateEntityId(e, pack.peakTemp?.entityId)}
-                            >
-                                ${pack.peakTemp ? `${pack.peakTemp.value.toFixed(1)} ${pack.peakTemp.unit}` : '—'}
-                            </span>
+                                    : ''
+                            )}
                         </div>
                     </div>
 
-                    <div class="chevron">
+                    <button
+                        type="button"
+                        class="expand-btn"
+                        aria-expanded="${String(isOpen)}"
+                        aria-controls="${drawerId}"
+                        aria-label="${pack.name}"
+                        @click=${(e: Event) => {
+                            e.stopPropagation();
+                            this._togglePack(pack.key);
+                        }}
+                    >
                         <ha-icon icon="mdi:chevron-down"></ha-icon>
-                    </div>
+                    </button>
                 </div>
 
                 ${pack.errorMessage
-                    ? html`
-                          <div
-                              class="pack-error clickable"
-                              @click=${(e: Event) => navigateEntityId(e, pack.errorEntityId)}
-                          >
-                              ${pack.errorMessage}
-                          </div>
-                      `
+                    ? pack.errorEntityId
+                        ? html`
+                              <button
+                                  type="button"
+                                  class="pack-error inline-btn"
+                                  @click=${(e: Event) => navigateEntityId(e, pack.errorEntityId)}
+                              >
+                                  ${pack.errorMessage}
+                              </button>
+                          `
+                        : html`<div class="pack-error">${pack.errorMessage}</div>`
                     : ''}
 
-                ${isOpen ? this._renderPackDrawer(pack) : ''}
+                ${isOpen ? this._renderPackDrawer(pack, drawerId) : ''}
             </div>
         `;
     }
@@ -1170,7 +1275,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
 
         const capSubtitle =
             bank.totalCapacityAh !== null
-                ? ` · ${bank.totalCapacityAh.toFixed(0)} Ah${bank.isPartial ? ` (${localize('bank.partial')})` : ''}`
+                ? ` · ${bank.totalCapacityAh.toFixed(0)} Ah${bank.isPartial || !bank.hasFullCapacityCoverage ? ` (${localize('bank.partial')})` : ''}`
                 : '';
 
         const statusLabelMap = {
@@ -1232,7 +1337,11 @@ export class JkBmsBankOverviewLayout extends LitElement {
                   ? ` · ~${etaStr} ${localize('bank.remainingShort')}`
                   : '';
 
-        const partialTag = bank.isPartial ? ` (${bank.onlineCount}/${bank.totalCount})` : '';
+        const partialTag = bank.isPartial
+            ? ` (${bank.onlineCount}/${bank.totalCount})`
+            : !bank.hasFullCapacityCoverage && (bank.totalRemainingAh !== null || bank.totalCapacityAh !== null)
+              ? ` (${localize('bank.partial')})`
+              : '';
 
         return html`
             <div class="hero">
@@ -1261,6 +1370,29 @@ export class JkBmsBankOverviewLayout extends LitElement {
                     <div class="soc-fill ${socClass}" style="width: ${socPct}%;"></div>
                 </div>
             </div>
+        `;
+    }
+
+    private _renderKpiTile(
+        label: string,
+        value: string,
+        meta: string,
+        valClass = '',
+        valStyle = '',
+        entityId?: string
+    ): TemplateResult {
+        const inner = html`
+            <div class="kpi-label">${label}</div>
+            <div class="kpi-val ${valClass}" style="${valStyle}">${value}</div>
+            <div class="kpi-meta">${meta}</div>
+        `;
+        if (!entityId) {
+            return html`<div class="kpi">${inner}</div>`;
+        }
+        return html`
+            <button type="button" class="kpi" @click=${(e: Event) => navigateEntityId(e, entityId)}>
+                ${inner}
+            </button>
         `;
     }
 
@@ -1293,46 +1425,28 @@ export class JkBmsBankOverviewLayout extends LitElement {
 
         return html`
             <div class="kpi-grid">
-                <div class="kpi">
-                    <div class="kpi-label">${localize('bank.bankVoltage')}</div>
-                    <div class="kpi-val">
-                        ${bank.avgVoltage !== null ? `${bank.avgVoltage.toFixed(2)} ${voltUnit}` : '—'}
-                    </div>
-                    <div class="kpi-meta">${spreadText}</div>
-                </div>
-                <div
-                    class="kpi ${bank.worstDelta?.entityId ? 'clickable' : ''}"
-                    @click=${(e: Event) => navigateEntityId(e, bank.worstDelta?.entityId)}
-                >
-                    <div class="kpi-label">${localize('bank.worstDelta')}</div>
-                    <div
-                        class="kpi-val ${bank.worstDelta?.isWarning
-                            ? 'c-warning'
-                            : bank.worstDelta
-                              ? 'c-success'
-                              : 'c-muted'}"
-                    >
-                        ${this._formatDelta(bank.worstDelta?.deltaMv ?? null)}
-                    </div>
-                    <div class="kpi-meta">${deltaMeta}</div>
-                </div>
-                <div
-                    class="kpi ${bank.peakTemp?.entityId ? 'clickable' : ''}"
-                    @click=${(e: Event) => navigateEntityId(e, bank.peakTemp?.entityId)}
-                >
-                    <div class="kpi-label">${localize('bank.peakTemp')}</div>
-                    <div class="kpi-val" style="${tempColor ? `color: ${tempColor};` : ''}">
-                        ${bank.peakTemp ? `${bank.peakTemp.value.toFixed(1)} ${bank.peakTemp.unit}` : '—'}
-                    </div>
-                    <div class="kpi-meta">
-                        ${bank.peakTemp ? `${bank.peakTemp.packName} · ${bank.peakTemp.label}` : '—'}
-                    </div>
-                </div>
-                <div class="kpi">
-                    <div class="kpi-label">${localize('bank.cellRange')}</div>
-                    <div class="kpi-val c-info">${cellRange}</div>
-                    <div class="kpi-meta">${balanceMeta}</div>
-                </div>
+                ${this._renderKpiTile(
+                    localize('bank.bankVoltage'),
+                    bank.avgVoltage !== null ? `${bank.avgVoltage.toFixed(2)} ${voltUnit}` : '—',
+                    spreadText
+                )}
+                ${this._renderKpiTile(
+                    localize('bank.worstDelta'),
+                    this._formatDelta(bank.worstDelta?.deltaMv ?? null),
+                    deltaMeta,
+                    bank.worstDelta?.isWarning ? 'c-warning' : bank.worstDelta ? 'c-success' : 'c-muted',
+                    '',
+                    bank.worstDelta?.entityId
+                )}
+                ${this._renderKpiTile(
+                    localize('bank.peakTemp'),
+                    bank.peakTemp ? `${bank.peakTemp.value.toFixed(1)} ${bank.peakTemp.unit}` : '—',
+                    bank.peakTemp ? `${bank.peakTemp.packName} · ${bank.peakTemp.label}` : '—',
+                    '',
+                    tempColor ? `color: ${tempColor};` : '',
+                    bank.peakTemp?.entityId
+                )}
+                ${this._renderKpiTile(localize('bank.cellRange'), cellRange, balanceMeta, 'c-info')}
             </div>
         `;
     }
@@ -1341,13 +1455,15 @@ export class JkBmsBankOverviewLayout extends LitElement {
         globalData.hass = this.hass;
         if (!this.hass || !this.config) return html``;
 
-        const { packs, isFallback } = resolveEffectivePacks(this.config);
-        const stableKeys = computeStablePackKeys(packs);
         const deltaWarningMv = this.config.deltaWarningMv ?? 30;
-
-        const snapshots = packs.map((pack, index) =>
-            readPackSnapshot(this.hass, this.config, pack, index, stableKeys[index], isFallback)
-        );
+        const snapshots = this._effectivePacks.map((pack, index) => {
+            const stableKey = this._stableKeys[index];
+            return readPackSnapshot(this.hass, this.config, pack, index, stableKey, {
+                isFallbackSinglePack: this._isFallback,
+                includeResistances: this._expandedPacks.has(stableKey),
+                cachedPackConfig: this._cachedPackConfigs[index],
+            });
+        });
         const bank = aggregateBankMetrics(snapshots, { deltaWarningMv });
 
         const showTitle = this.config.showTitle !== false;
@@ -1370,9 +1486,7 @@ export class JkBmsBankOverviewLayout extends LitElement {
                     ${snapshots.map(pack => this._renderPackRow(pack, deltaWarningMv))}
                 </div>
 
-                ${showCardVersion
-                    ? html`<div class="card-version">v.${this.VERSION}</div>`
-                    : ''}
+                ${showCardVersion ? html`<div class="card-version">v.${this.VERSION}</div>` : ''}
             </ha-card>
         `;
     }

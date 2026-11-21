@@ -19,6 +19,11 @@ export interface StateReading {
     exists: boolean;
 }
 
+export interface CandidateOptions {
+    // When true, do not fall back from a preset's pack-scoped mapping to legacy/alias bank-level names.
+    strictPresetOnly?: boolean;
+}
+
 const UNAVAILABLE_STATES = new Set(['', 'unknown', 'unavailable', 'none', 'null', 'nan']);
 
 const CELL_VOLTAGE_RE = /^cell_voltage_(\d+)$/;
@@ -38,12 +43,22 @@ const ENTITY_ALIASES: Partial<Record<EntityKey, string[]>> = {
 
 const isFullEntityId = (value: string) => value.includes('.');
 
+const normalizedPrefix = (config?: JkBmsCardConfig): string =>
+    typeof config?.prefix === 'string' ? config.prefix.trim() : '';
+
+const normalizedPackZeroBased = (config?: JkBmsCardConfig): number => {
+    const raw = config?.packIndex ?? config?.batteryNumber ?? 1;
+    const numeric = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 1) {
+        return 0;
+    }
+    return numeric - 1;
+};
+
 const expandPlaceholders = (value: string, config?: JkBmsCardConfig): string => {
-    const packNum = config?.packIndex ?? config?.batteryNumber ?? 1;
-    const packZeroBased = Math.max(packNum - 1, 0);
-    return value
-        .replace(/\{prefix\}/g, config?.prefix ?? '')
-        .replace(/\{pack\}/g, String(packZeroBased));
+    const prefix = normalizedPrefix(config);
+    const packZeroBased = normalizedPackZeroBased(config);
+    return value.replace(/\{prefix\}/g, prefix).replace(/\{pack\}/g, String(packZeroBased));
 };
 
 const withDomain = (value: string, type: EntityDomain) =>
@@ -53,7 +68,7 @@ const prefixedEntityId = (config: JkBmsCardConfig, suffix: string, type: EntityD
     const expanded = expandPlaceholders(suffix, config);
     if (!expanded) return undefined;
     if (isFullEntityId(expanded)) return expanded;
-    const prefix = config?.prefix?.trim();
+    const prefix = normalizedPrefix(config);
     if (!prefix) return undefined;
     return `${type}.${prefix}_${expanded}`;
 };
@@ -109,7 +124,8 @@ const generatedCellEntity = (
 export const candidateEntityIds = (
     config: JkBmsCardConfig,
     entityKey: EntityKey,
-    type: EntityDomain = 'sensor'
+    type: EntityDomain = 'sensor',
+    options: CandidateOptions = {}
 ): string[] => {
     const generatedCell = generatedCellEntity(config, entityKey, type);
     if (generatedCell) return [generatedCell];
@@ -117,12 +133,15 @@ export const candidateEntityIds = (
     const configuredValue = config?.entities?.[entityKey]?.toString()?.trim();
     const hasManualOverride = Boolean(configuredValue && configuredValue.length > 1);
 
-    const presetValue = getPreset(config).entities[entityKey];
+    const preset = getPreset(config);
+    const presetValue = preset.entities[entityKey];
 
     // If the preset explicitly maps this key to '', the BMS does not expose it:
-    // suppress alias and legacy fallbacks unless the user supplied a manual override.
-    if (!hasManualOverride && presetValue === '') {
-        return [];
+    // suppress alias and legacy fallbacks. If the user supplied a manual override, return ONLY that override.
+    if (presetValue === '') {
+        if (!hasManualOverride || !configuredValue) return [];
+        const manualId = prefixedEntityId(config, configuredValue, type);
+        return manualId ? [manualId] : [];
     }
 
     const candidates: Array<string | undefined> = [];
@@ -132,6 +151,36 @@ export const candidateEntityIds = (
     }
 
     if (presetValue !== undefined && presetValue !== '') {
+        candidates.push(prefixedEntityId(config, presetValue, type));
+        if (options.strictPresetOnly) {
+            return [...new Set(candidates.filter(Boolean) as string[])];
+        }
+    }
+
+    for (const alias of ENTITY_ALIASES[entityKey] ?? []) {
+        candidates.push(prefixedEntityId(config, alias, type));
+    }
+
+    const legacyValue = entityKey?.toString();
+    if (legacyValue) {
+        candidates.push(prefixedEntityId(config, legacyValue, type));
+    }
+
+    return [...new Set(candidates.filter(Boolean) as string[])];
+};
+
+// Returns only the legacy/alias bank-level candidate IDs (ignoring pack-scoped preset entries).
+export const bankLevelCandidateEntityIds = (
+    config: JkBmsCardConfig,
+    entityKey: EntityKey,
+    type: EntityDomain = 'sensor'
+): string[] => {
+    const preset = getPreset(config);
+    const presetValue = preset.entities[entityKey];
+    const candidates: Array<string | undefined> = [];
+
+    // Include preset mapping if it does NOT reference {pack} (i.e. it is bank-level like total_capacity / delta_voltage)
+    if (presetValue !== undefined && presetValue !== '' && !presetValue.includes('{pack}')) {
         candidates.push(prefixedEntityId(config, presetValue, type));
     }
 
@@ -151,11 +200,12 @@ const resolveEntityRecord = (
     hass: HomeAssistant | undefined,
     config: JkBmsCardConfig,
     entityKey: EntityKey,
-    type: EntityDomain = 'sensor'
+    type: EntityDomain = 'sensor',
+    options?: CandidateOptions
 ) => {
     const states = hass?.states;
     if (!states) return null;
-    for (const entityId of candidateEntityIds(config, entityKey, type)) {
+    for (const entityId of candidateEntityIds(config, entityKey, type, options)) {
         const entity = states[entityId];
         if (entity) return { entity, entityId };
     }
@@ -166,9 +216,11 @@ export const resolveEntityId = (
     hass: HomeAssistant | undefined,
     config: JkBmsCardConfig,
     entityKey: EntityKey,
-    type: EntityDomain = 'sensor'
+    type: EntityDomain = 'sensor',
+    options?: CandidateOptions
 ): string | undefined =>
-    resolveEntityRecord(hass, config, entityKey, type)?.entityId ?? candidateEntityIds(config, entityKey, type)[0];
+    resolveEntityRecord(hass, config, entityKey, type, options)?.entityId ??
+    candidateEntityIds(config, entityKey, type, options)[0];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fireEvent(node: HTMLElement, type: string, detail: any, options?: any) {
@@ -187,10 +239,10 @@ export function fireEvent(node: HTMLElement, type: string, detail: any, options?
 
 export const configOrEnum = (config: JkBmsCardConfig, entityId: EntityKey): string => {
     const configValue = config?.entities?.[entityId]?.toString()?.trim();
-    if (configValue && configValue.length > 1) return configValue;
+    if (configValue && configValue.length > 1) return expandPlaceholders(configValue, config);
 
     const presetValue = getPreset(config).entities[entityId];
-    return presetValue !== undefined ? presetValue : entityId?.toString();
+    return presetValue !== undefined ? expandPlaceholders(presetValue, config) : entityId?.toString();
 };
 
 export const navigate = (
@@ -261,13 +313,38 @@ export const isUnavailableState = (raw: string | null | undefined): boolean => {
     return UNAVAILABLE_STATES.has(raw.trim().toLowerCase());
 };
 
+export const readNumericFromCandidates = (
+    hass: HomeAssistant | undefined,
+    candidates: string[]
+): NumericReading => {
+    const states = hass?.states;
+    if (!states) {
+        return { value: null, unit: '', entityId: undefined, exists: false };
+    }
+    for (const entityId of candidates) {
+        const entity = states[entityId];
+        if (!entity) continue;
+        const unit = entity.attributes?.unit_of_measurement ?? '';
+        if (isUnavailableState(entity.state)) {
+            return { value: null, unit, entityId, exists: true };
+        }
+        const num = Number(entity.state.trim());
+        if (!Number.isFinite(num)) {
+            return { value: null, unit, entityId, exists: true };
+        }
+        return { value: num, unit, entityId, exists: true };
+    }
+    return { value: null, unit: '', entityId: undefined, exists: false };
+};
+
 export const getRawState = (
     hass: HomeAssistant,
     config: JkBmsCardConfig,
     entityKey: EntityKey,
-    type: EntityDomain = 'sensor'
+    type: EntityDomain = 'sensor',
+    options?: CandidateOptions
 ): StateReading => {
-    const record = resolveEntityRecord(hass, config, entityKey, type);
+    const record = resolveEntityRecord(hass, config, entityKey, type, options);
     if (!record) {
         return { state: null, unit: '', entityId: undefined, exists: false };
     }
@@ -285,9 +362,10 @@ export const getNumericState = (
     hass: HomeAssistant,
     config: JkBmsCardConfig,
     entityKey: EntityKey,
-    type: EntityDomain = 'sensor'
+    type: EntityDomain = 'sensor',
+    options?: CandidateOptions
 ): NumericReading => {
-    const raw = getRawState(hass, config, entityKey, type);
+    const raw = getRawState(hass, config, entityKey, type, options);
     if (raw.state === null) {
         return { value: null, unit: raw.unit, entityId: raw.entityId, exists: raw.exists };
     }
@@ -312,13 +390,16 @@ export const getState = (
     if (!record) return defaultValue;
 
     const state = record.entity.state;
-    const numeric = Number(state);
+    if (state === '' || state === null || state === undefined) {
+        return defaultValue;
+    }
 
-    if (state !== '' && !isNaN(numeric)) {
+    const numeric = Number(state);
+    if (!isNaN(numeric)) {
         return numeric.toFixed(precision);
     }
 
-    return state ?? defaultValue;
+    return state;
 };
 
 export const getUnit = (
@@ -400,6 +481,23 @@ export const toVolts = (value: number, unit?: string | null): number => {
 export const toMillivolts = (value: number, unit?: string | null): number => {
     const norm = normalizeUnit(unit);
     return norm === 'mV' ? value : value * 1000;
+};
+
+export const toAmps = (value: number, unit?: string | null): number | null => {
+    if (!unit || !unit.trim()) return value;
+    const u = unit.trim().toLowerCase();
+    if (u === 'a' || u === 'amp' || u === 'amps') return value;
+    if (u === 'ma' || u === 'milliamp' || u === 'milliamps') return value / 1000;
+    return null;
+};
+
+export const toWatts = (value: number, unit?: string | null): number | null => {
+    if (!unit || !unit.trim()) return value;
+    const u = unit.trim().toLowerCase();
+    if (u === 'w' || u === 'watt' || u === 'watts') return value;
+    if (u === 'kw' || u === 'kilowatt' || u === 'kilowatts') return value * 1000;
+    if (u === 'mw' || u === 'milliwatt' || u === 'milliwatts') return value / 1000;
+    return null;
 };
 
 export const toCelsius = (value: number, unit?: string | null): number => {

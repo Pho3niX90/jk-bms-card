@@ -92,9 +92,13 @@ describe('applyPackModelDefaults', () => {
         expect((result as any).showButtons).toBeUndefined();
     });
 
-    it('keeps a custom pack prefix', () => {
-        const result = applyPackModelDefaults(pack({ bmsModel: 'seplos_v3_ble', prefix: 'pack_west' }), 'jk');
+    it('keeps a custom pack prefix and custom cell/temp counts when switching models', () => {
+        const result = applyPackModelDefaults(
+            pack({ bmsModel: 'seplos_v3_ble', prefix: 'pack_west', cellCount: 8, tempSensorsCount: 2 }),
+            'jk'
+        );
         expect(result.prefix).toBe('pack_west');
-        expect(result.cellCount).toBe(16);
+        expect(result.cellCount).toBe(8);
+        expect(result.tempSensorsCount).toBe(2);
     });
 });

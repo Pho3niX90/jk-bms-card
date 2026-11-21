@@ -1,21 +1,27 @@
 import { HomeAssistant } from 'custom-card-helpers';
 import { EntityKey } from '../const';
 import { ExtraEntityKey, JkBmsCardConfig, JkBmsPackConfig } from '../interfaces';
+import { getPreset } from '../presets';
 import {
+    bankLevelCandidateEntityIds,
     candidateEntityIds,
     EntityDomain,
     getNumericState,
     getRawState,
     isCellBalancingFromMask,
     parseBalancerBitmask,
+    readNumericFromCandidates,
+    toAmps,
     toCelsius,
     toMillivolts,
     toVolts,
+    toWatts,
 } from './utils';
 
 export interface FetState {
     exists: boolean;
     isOn: boolean;
+    isUnavailable: boolean;
     entityId?: string;
 }
 
@@ -39,6 +45,21 @@ export interface TempReading {
     entityId?: string;
 }
 
+export interface BankFallbackSource {
+    voltage?: number | null;
+    voltageEntityId?: string;
+    current?: number | null;
+    currentEntityId?: string;
+    power?: number | null;
+    powerEntityId?: string;
+    soc?: number | null;
+    socEntityId?: string;
+    remainingAh?: number | null;
+    remainingAhEntityId?: string;
+    capacityAh?: number | null;
+    capacityAhEntityId?: string;
+}
+
 export interface PackSnapshot {
     key: string;
     index: number;
@@ -56,10 +77,14 @@ export interface PackSnapshot {
     power: number | null;
     powerDerived: boolean;
     powerEntityId?: string;
+    // Electrical source key for deduping measured or derived power when current sensors are shared.
+    powerSourceKey?: string;
     remainingAh: number | null;
     remainingAhEntityId?: string;
     capacityAh: number | null;
     capacityAhEntityId?: string;
+    // Optional bank-level fallback readings (used for shared-prefix models like Seplos BLE when pack-level sensors aren't enabled).
+    bankFallback?: BankFallbackSource;
     cycles: number | null;
     cyclesEntityId?: string;
     cycleCapacityAh: number | null;
@@ -134,6 +159,7 @@ export interface BankSnapshot {
     totalPower: number | null;
     totalRemainingAh: number | null;
     totalCapacityAh: number | null;
+    hasFullCapacityCoverage: boolean;
     remainingKwh: number | null;
     totalKwh: number | null;
     currentDeadbandA: number;
@@ -151,17 +177,19 @@ export interface BankSnapshot {
 const PACK_ONLY_ROOT_ENTITY_KEYS = new Set<string>(['cell_prefix', 'cell_resistance_prefix', 'device_id']);
 const NON_ERROR_STRINGS = new Set(['', '0', 'none', 'ok', 'normal', '-']);
 
-const isTruthyHeater = (val: unknown): boolean => val === true || val === 1 || val === '1';
+export const isTruthyHeater = (val: unknown): boolean => val === true || val === 1 || val === '1';
 
+// Collision-free stable key encoding. Omits `name` when `id` is absent so renaming a pack keeps its drawer open.
 export const computeStablePackKeys = (packs: JkBmsPackConfig[]): string[] => {
     const counts = new Map<string, number>();
     return packs.map(pack => {
-        const base =
-            pack.id?.trim() ||
-            `${pack.prefix ?? ''}|${pack.packIndex ?? pack.batteryNumber ?? ''}|${pack.name ?? ''}`;
-        const seen = (counts.get(base) ?? 0) + 1;
-        counts.set(base, seen);
-        return seen === 1 ? base : `${base}#${seen}`;
+        const id = typeof pack.id === 'string' ? pack.id.trim() : '';
+        const prefix = typeof pack.prefix === 'string' ? pack.prefix.trim() : '';
+        const idxPart = pack.packIndex ?? pack.batteryNumber ?? '';
+        const base = id ? JSON.stringify(['id', id]) : JSON.stringify(['p', prefix, String(idxPart)]);
+        const occurrence = (counts.get(base) ?? 0) + 1;
+        counts.set(base, occurrence);
+        return JSON.stringify([base, occurrence]);
     });
 };
 
@@ -172,10 +200,12 @@ export const resolveEffectivePacks = (
         return { packs: rootConfig.packs, isFallback: false };
     }
 
+    const legacyResistances = (rootConfig as Record<string, unknown>)?.cell_resistances as string[] | undefined;
+
     const fallback: JkBmsPackConfig = {
         id: 'root-fallback-pack',
-        name: rootConfig.batteryName?.trim() || undefined,
-        prefix: rootConfig.prefix ?? '',
+        name: typeof rootConfig.batteryName === 'string' ? rootConfig.batteryName.trim() || undefined : undefined,
+        prefix: typeof rootConfig.prefix === 'string' ? rootConfig.prefix.trim() : '',
         bmsModel: rootConfig.bmsModel,
         packIndex: rootConfig.packIndex ?? rootConfig.batteryNumber ?? 1,
         batteryNumber: rootConfig.batteryNumber,
@@ -185,7 +215,7 @@ export const resolveEffectivePacks = (
         deviceId: rootConfig.deviceId,
         entities: rootConfig.entities,
         cells: rootConfig.cells,
-        cellResistances: rootConfig.cellResistances,
+        cellResistances: rootConfig.cellResistances ?? legacyResistances,
         cellPrefix: rootConfig.cellPrefix,
         cellResistancePrefix: rootConfig.cellResistancePrefix,
     };
@@ -233,14 +263,17 @@ export const buildPackConfig = (
     }
 
     const packIndex = pack.packIndex ?? pack.batteryNumber ?? index + 1;
-    const hasHeater = pack.hasHeater !== undefined ? Boolean(pack.hasHeater) : isTruthyHeater(rootConfig.hasHeater);
+    const hasHeater =
+        pack.hasHeater !== undefined ? isTruthyHeater(pack.hasHeater) : isTruthyHeater(rootConfig.hasHeater);
+    const legacyRootRes = (rootConfig as Record<string, unknown>)?.cell_resistances as string[] | undefined;
+    const legacyPackRes = (pack as unknown as Record<string, unknown>)?.cell_resistances as string[] | undefined;
 
     return {
         type: rootConfig.type,
-        title: pack.name ?? rootConfig.title,
+        title: (typeof pack.name === 'string' ? pack.name : undefined) ?? rootConfig.title,
         bmsModel: pack.bmsModel ?? rootConfig.bmsModel,
-        prefix: pack.prefix ?? '',
-        batteryName: pack.name,
+        prefix: typeof pack.prefix === 'string' ? pack.prefix.trim() : '',
+        batteryName: typeof pack.name === 'string' ? pack.name : undefined,
         packIndex,
         batteryNumber: pack.batteryNumber ?? packIndex,
         cellCount: pack.cellCount ?? rootConfig.cellCount ?? 16,
@@ -263,8 +296,8 @@ export const buildPackConfig = (
         deviceId: isFallbackSinglePack ? (pack.deviceId ?? rootConfig.deviceId) : pack.deviceId,
         cells: isFallbackSinglePack ? (pack.cells ?? rootConfig.cells) : pack.cells,
         cellResistances: isFallbackSinglePack
-            ? (pack.cellResistances ?? rootConfig.cellResistances)
-            : pack.cellResistances,
+            ? (pack.cellResistances ?? legacyPackRes ?? rootConfig.cellResistances ?? legacyRootRes)
+            : (pack.cellResistances ?? legacyPackRes),
         cellPrefix: isFallbackSinglePack ? (pack.cellPrefix ?? rootConfig.cellPrefix) : pack.cellPrefix,
         cellResistancePrefix: isFallbackSinglePack
             ? (pack.cellResistancePrefix ?? rootConfig.cellResistancePrefix)
@@ -310,6 +343,9 @@ export const collectWatchedEntityIds = (rootConfig: JkBmsCardConfig): string[] =
         const packConfig = buildPackConfig(rootConfig, pack, index, isFallback);
         for (const [key, domain] of WATCHED_CORE_KEYS) {
             for (const id of candidateEntityIds(packConfig, key, domain)) {
+                ids.add(id);
+            }
+            for (const id of bankLevelCandidateEntityIds(packConfig, key, domain)) {
                 ids.add(id);
             }
         }
@@ -384,15 +420,12 @@ export const countMatchedPackEntities = (
     return matched.size;
 };
 
-const readFet = (
-    hass: HomeAssistant,
-    packConfig: JkBmsCardConfig,
-    key: EntityKey
-): FetState => {
+const readFet = (hass: HomeAssistant, packConfig: JkBmsCardConfig, key: EntityKey): FetState => {
     const reading = getRawState(hass, packConfig, key, 'switch');
     return {
         exists: reading.exists,
         isOn: reading.state?.toLowerCase() === 'on',
+        isUnavailable: reading.exists && reading.state === null,
         entityId: reading.entityId,
     };
 };
@@ -404,29 +437,55 @@ const parseErrorState = (state: string | null): string | null => {
     return trimmed;
 };
 
+export interface ReadPackOptions {
+    isFallbackSinglePack?: boolean;
+    includeResistances?: boolean;
+    cachedPackConfig?: JkBmsCardConfig;
+}
+
 export const readPackSnapshot = (
     hass: HomeAssistant,
     rootConfig: JkBmsCardConfig,
     pack: JkBmsPackConfig,
     index: number,
     stableKey: string,
-    isFallbackSinglePack = false
+    optionsOrFallback: boolean | ReadPackOptions = false
 ): PackSnapshot => {
-    const packConfig = buildPackConfig(rootConfig, pack, index, isFallbackSinglePack);
-    const cellCount = Math.min(Math.max(packConfig.cellCount ?? 16, 0), 96);
+    const opts: ReadPackOptions =
+        typeof optionsOrFallback === 'boolean'
+            ? { isFallbackSinglePack: optionsOrFallback, includeResistances: true }
+            : optionsOrFallback;
 
-    const voltageRead = getNumericState(hass, packConfig, EntityKey.total_voltage);
-    const currentRead = getNumericState(hass, packConfig, EntityKey.current);
+    const isFallbackSinglePack = opts.isFallbackSinglePack ?? false;
+    const packConfig = opts.cachedPackConfig ?? buildPackConfig(rootConfig, pack, index, isFallbackSinglePack);
+    const cellCount = Math.min(Math.max(packConfig.cellCount ?? 16, 0), 96);
+    const preset = getPreset(packConfig);
+    const strictKeys = new Set<EntityKey>(preset.strictPackKeys ?? []);
+    const bankScopedKeys = new Set<EntityKey>(preset.bankScopedKeys ?? []);
+
+    const optFor = (key: EntityKey) =>
+        strictKeys.has(key) ? { strictPresetOnly: true } : undefined;
+
+    const voltageRead = getNumericState(hass, packConfig, EntityKey.total_voltage, 'sensor', optFor(EntityKey.total_voltage));
+    const currentRead = getNumericState(hass, packConfig, EntityKey.current, 'sensor', optFor(EntityKey.current));
     const powerRead = getNumericState(hass, packConfig, EntityKey.power);
-    const socRead = getNumericState(hass, packConfig, EntityKey.state_of_charge);
+    const socRead = getNumericState(hass, packConfig, EntityKey.state_of_charge, 'sensor', optFor(EntityKey.state_of_charge));
     const remainingRead = getNumericState(hass, packConfig, EntityKey.capacity_remaining);
     const capacityRead = getNumericState(hass, packConfig, EntityKey.total_battery_capacity_setting);
-    const cyclesRead = getNumericState(hass, packConfig, EntityKey.charging_cycles);
+    const cyclesRead = getNumericState(hass, packConfig, EntityKey.charging_cycles, 'sensor', optFor(EntityKey.charging_cycles));
     const cycleCapRead = getNumericState(hass, packConfig, EntityKey.total_charging_cycle_capacity);
-    const avgCellRead = getNumericState(hass, packConfig, EntityKey.average_cell_voltage);
-    const deltaRead = getNumericState(hass, packConfig, EntityKey.delta_cell_voltage);
-    const minCellVRead = getNumericState(hass, packConfig, EntityKey.min_cell_voltage);
-    const maxCellVRead = getNumericState(hass, packConfig, EntityKey.max_cell_voltage);
+    const avgCellRead = bankScopedKeys.has(EntityKey.average_cell_voltage)
+        ? { value: null, unit: '', entityId: undefined, exists: false }
+        : getNumericState(hass, packConfig, EntityKey.average_cell_voltage);
+    const deltaRead = bankScopedKeys.has(EntityKey.delta_cell_voltage)
+        ? { value: null, unit: '', entityId: undefined, exists: false }
+        : getNumericState(hass, packConfig, EntityKey.delta_cell_voltage);
+    const minCellVRead = bankScopedKeys.has(EntityKey.min_cell_voltage)
+        ? { value: null, unit: '', entityId: undefined, exists: false }
+        : getNumericState(hass, packConfig, EntityKey.min_cell_voltage);
+    const maxCellVRead = bankScopedKeys.has(EntityKey.max_cell_voltage)
+        ? { value: null, unit: '', entityId: undefined, exists: false }
+        : getNumericState(hass, packConfig, EntityKey.max_cell_voltage);
     const minCellIdRead = getNumericState(hass, packConfig, EntityKey.min_voltage_cell);
     const maxCellIdRead = getNumericState(hass, packConfig, EntityKey.max_voltage_cell);
     const balCurrentRead = getNumericState(hass, packConfig, EntityKey.balancing_current);
@@ -437,20 +496,23 @@ export const readPackSnapshot = (
     const swRead = getRawState(hass, packConfig, EntityKey.software_version);
 
     const voltage = voltageRead.value !== null ? toVolts(voltageRead.value, voltageRead.unit) : null;
-    const current = currentRead.value;
+    const current = currentRead.value !== null ? toAmps(currentRead.value, currentRead.unit) : null;
 
-    let power = powerRead.value;
+    let power = powerRead.value !== null ? toWatts(powerRead.value, powerRead.unit) : null;
     let powerDerived = false;
     let powerEntityId = powerRead.entityId;
+    let powerSourceKey = power !== null ? (powerRead.entityId ?? currentRead.entityId) : undefined;
+
     if (power === null && voltage !== null && current !== null) {
         power = voltage * current;
         powerDerived = true;
-        if (currentRead.entityId) {
-            powerEntityId = `derived:${voltageRead.entityId ?? ''}:${currentRead.entityId}`;
-        }
+        powerEntityId = currentRead.entityId;
+        // Key derived power by currentEntityId so two packs sharing a current sensor never double-count power.
+        powerSourceKey = currentRead.entityId ? `cur:${currentRead.entityId}` : undefined;
     }
 
     const balancerMask = parseBalancerBitmask(hass, packConfig);
+    const readResistances = Boolean(packConfig.showResistances) && opts.includeResistances !== false;
 
     // Read cells & compute dynamic min/max/avg from valid positive voltages (> 0 V)
     const cells: CellSnapshot[] = [];
@@ -463,7 +525,7 @@ export const readPackSnapshot = (
 
     for (let i = 1; i <= cellCount; i++) {
         const vRead = getNumericState(hass, packConfig, `cell_voltage_${i}` as EntityKey);
-        const rRead = packConfig.showResistances
+        const rRead = readResistances
             ? getNumericState(hass, packConfig, `cell_resistance_${i}` as EntityKey)
             : { value: null, unit: '', entityId: undefined, exists: false };
 
@@ -511,29 +573,52 @@ export const readPackSnapshot = (
             ? maxCellIdRead.value
             : null;
 
-    const minCellId = sensorMinId ?? dynMinId;
-    const maxCellId = sensorMaxId ?? dynMaxId;
+    // Prefer cell-derived extrema/delta/average whenever >= 2 valid cells are present so shared
+    // summary sensors can never override per-pack cell telemetry.
+    const hasCellStats = validCellCount >= 2;
+
+    const minCellId = hasCellStats ? dynMinId : (sensorMinId ?? dynMinId);
+    const maxCellId = hasCellStats ? dynMaxId : (sensorMaxId ?? dynMaxId);
 
     const sensorMinV = minCellVRead.value !== null ? toVolts(minCellVRead.value, minCellVRead.unit) : null;
     const sensorMaxV = maxCellVRead.value !== null ? toVolts(maxCellVRead.value, maxCellVRead.unit) : null;
 
-    const minCellV = sensorMinV !== null && sensorMinV > 0 ? sensorMinV : dynMinV !== Infinity ? dynMinV : null;
-    const maxCellV = sensorMaxV !== null && sensorMaxV > 0 ? sensorMaxV : dynMaxV !== -Infinity ? dynMaxV : null;
+    const minCellV = hasCellStats
+        ? dynMinV
+        : sensorMinV !== null && sensorMinV > 0
+          ? sensorMinV
+          : dynMinV !== Infinity
+            ? dynMinV
+            : null;
+    const maxCellV = hasCellStats
+        ? dynMaxV
+        : sensorMaxV !== null && sensorMaxV > 0
+          ? sensorMaxV
+          : dynMaxV !== -Infinity
+            ? dynMaxV
+            : null;
 
     const sensorDeltaMv =
         deltaRead.value !== null && deltaRead.value >= 0
             ? toMillivolts(deltaRead.value, deltaRead.unit)
             : null;
-    const dynDeltaMv = validCellCount >= 2 ? Math.round(Math.max(0, (dynMaxV - dynMinV) * 1000) * 1000) / 1000 : null;
-    const deltaMv =
-        sensorDeltaMv !== null && (sensorDeltaMv > 0 || dynDeltaMv === null) ? sensorDeltaMv : dynDeltaMv;
+    const dynDeltaMv = hasCellStats ? Math.round(Math.max(0, (dynMaxV - dynMinV) * 1000) * 1000) / 1000 : null;
+    const deltaMv = hasCellStats
+        ? dynDeltaMv
+        : sensorDeltaMv !== null && sensorDeltaMv >= 0
+          ? sensorDeltaMv
+          : dynDeltaMv;
     const deltaV = deltaMv !== null ? deltaMv / 1000 : null;
 
     const sensorAvgV = avgCellRead.value !== null ? toVolts(avgCellRead.value, avgCellRead.unit) : null;
-    const averageCellV =
-        sensorAvgV !== null && sensorAvgV > 0 ? sensorAvgV : validCellCount > 0 ? cellSum / validCellCount : null;
+    const averageCellV = hasCellStats
+        ? cellSum / validCellCount
+        : sensorAvgV !== null && sensorAvgV > 0
+          ? sensorAvgV
+          : validCellCount > 0
+            ? cellSum / validCellCount
+            : null;
 
-    // Mark min/max cells
     if (minCellId !== null || maxCellId !== null) {
         for (const cell of cells) {
             cell.isMin = minCellId !== null && cell.index === minCellId;
@@ -541,8 +626,14 @@ export const readPackSnapshot = (
         }
     }
 
-    // Temperatures (compare in °C, keep display value & unit)
-    const mosRead = getNumericState(hass, packConfig, EntityKey.power_tube_temperature);
+    // Temperatures (compare in °C, preserve display value & unit)
+    const mosRead = getNumericState(
+        hass,
+        packConfig,
+        EntityKey.power_tube_temperature,
+        'sensor',
+        optFor(EntityKey.power_tube_temperature)
+    );
     const mosTemp: TempReading | null =
         mosRead.value !== null
             ? {
@@ -581,16 +672,61 @@ export const readPackSnapshot = (
     const balancerFet = readFet(hass, packConfig, EntityKey.balancer);
     const heaterFet = isTruthyHeater(packConfig.hasHeater)
         ? readFet(hass, packConfig, EntityKey.heater)
-        : { exists: false, isOn: false, entityId: undefined };
+        : { exists: false, isOn: false, isUnavailable: false, entityId: undefined };
 
     const isBalancing =
         balBinaryRead.state?.toLowerCase() === 'on' ||
         (balCurrentRead.value !== null && Math.abs(balCurrentRead.value) > 0.01) ||
         balancerMask !== 0n;
 
-    const isOnline = voltage !== null || socRead.value !== null || validCellCount > 0;
+    // For presets with strictPackKeys (e.g. Seplos BLE), only pack-scoped telemetry counts toward pack availability.
+    const isOnline =
+        voltage !== null ||
+        socRead.value !== null ||
+        current !== null ||
+        validCellCount > 0 ||
+        mosTemp !== null ||
+        tempSensors.length > 0;
 
-    const primaryEntityForDevice = voltageRead.entityId ?? socRead.entityId ?? runtimeRead.entityId;
+    // Collect bank-level fallback readings for presets like Seplos V3 BLE when users haven't enabled
+    // per-pack voltage/current/SoC sensors in ESPHome.
+    let bankFallback: BankFallbackSource | undefined;
+    if (preset.sharedPrefix) {
+        const fbVoltageRead = readNumericFromCandidates(
+            hass,
+            bankLevelCandidateEntityIds(packConfig, EntityKey.total_voltage)
+        );
+        const fbCurrentRead = readNumericFromCandidates(
+            hass,
+            bankLevelCandidateEntityIds(packConfig, EntityKey.current)
+        );
+        const fbPowerRead = readNumericFromCandidates(hass, bankLevelCandidateEntityIds(packConfig, EntityKey.power));
+        const fbSocRead = readNumericFromCandidates(
+            hass,
+            bankLevelCandidateEntityIds(packConfig, EntityKey.state_of_charge)
+        );
+        const fbVoltage = fbVoltageRead.value !== null ? toVolts(fbVoltageRead.value, fbVoltageRead.unit) : null;
+        const fbCurrent = fbCurrentRead.value !== null ? toAmps(fbCurrentRead.value, fbCurrentRead.unit) : null;
+        const fbPower = fbPowerRead.value !== null ? toWatts(fbPowerRead.value, fbPowerRead.unit) : null;
+
+        bankFallback = {
+            voltage: fbVoltage,
+            voltageEntityId: fbVoltageRead.entityId,
+            current: fbCurrent,
+            currentEntityId: fbCurrentRead.entityId,
+            power: fbPower,
+            powerEntityId: fbPowerRead.entityId,
+            soc: fbSocRead.value,
+            socEntityId: fbSocRead.entityId,
+            remainingAh: remainingRead.value,
+            remainingAhEntityId: remainingRead.entityId,
+            capacityAh: capacityRead.value,
+            capacityAhEntityId: capacityRead.entityId,
+        };
+    }
+
+    const primaryEntityForDevice =
+        voltageRead.entityId ?? socRead.entityId ?? cells[0]?.voltageEntityId ?? mosRead.entityId ?? runtimeRead.entityId;
     const hassEntities = (hass as unknown as { entities?: Record<string, { device_id?: string }> })?.entities;
     const deviceId =
         packConfig.deviceId?.trim() ||
@@ -600,7 +736,7 @@ export const readPackSnapshot = (
     return {
         key: stableKey,
         index,
-        name: pack.name?.trim() || `Pack ${index + 1}`,
+        name: (typeof pack.name === 'string' && pack.name.trim()) || `Pack ${index + 1}`,
         prefix: packConfig.prefix,
         bmsModel: packConfig.bmsModel,
         packConfig,
@@ -614,10 +750,12 @@ export const readPackSnapshot = (
         power,
         powerDerived,
         powerEntityId,
+        powerSourceKey,
         remainingAh: remainingRead.value,
         remainingAhEntityId: remainingRead.entityId,
         capacityAh: capacityRead.value,
         capacityAhEntityId: capacityRead.entityId,
+        bankFallback,
         cycles: cyclesRead.value,
         cyclesEntityId: cyclesRead.entityId,
         cycleCapacityAh: cycleCapRead.value,
@@ -649,27 +787,44 @@ export const readPackSnapshot = (
         hardwareVersion: hwRead.state,
         softwareVersion: swRead.state,
         deviceId,
-        navigationPath: pack.navigationPath?.trim() || undefined,
+        navigationPath: typeof pack.navigationPath === 'string' ? pack.navigationPath.trim() || undefined : undefined,
         cells,
     };
 };
 
-const sumDeduplicated = (items: Array<{ value: number | null; entityId?: string }>): number | null => {
-    const seen = new Set<string>();
+interface SumResult {
+    sum: number | null;
+    coveredPackKeys: Set<string>;
+}
+
+const sumDeduplicatedWithCoverage = (
+    items: Array<{ packKey: string; value: number | null; entityId?: string }>
+): SumResult => {
+    const seenEntityIds = new Set<string>();
+    const coveredPackKeys = new Set<string>();
     let sum = 0;
     let count = 0;
 
     for (const item of items) {
         if (item.value === null || !Number.isFinite(item.value)) continue;
+        coveredPackKeys.add(item.packKey);
         if (item.entityId) {
-            if (seen.has(item.entityId)) continue;
-            seen.add(item.entityId);
+            if (seenEntityIds.has(item.entityId)) continue;
+            seenEntityIds.add(item.entityId);
         }
         sum += item.value;
         count++;
     }
 
-    return count > 0 ? sum : null;
+    return { sum: count > 0 ? sum : null, coveredPackKeys };
+};
+
+const setsEqual = (a: Set<string>, b: Set<string>): boolean => {
+    if (a.size !== b.size) return false;
+    for (const v of a) {
+        if (!b.has(v)) return false;
+    }
+    return true;
 };
 
 // Pure bank aggregation for parallel battery banks (v1).
@@ -682,69 +837,152 @@ export const aggregateBankMetrics = (
     const onlinePacks = packs.filter(p => p.isOnline);
     const onlineCount = onlinePacks.length;
     const isPartial = onlineCount < totalCount;
+    const allOnlineKeys = new Set(onlinePacks.map(p => p.key));
 
-    // Deduplicated parallel sums (prevents shared bank-level sensors like Seplos V3 BLE from being counted N times)
-    const totalCurrent = sumDeduplicated(onlinePacks.map(p => ({ value: p.current, entityId: p.currentEntityId })));
-    const totalPower = sumDeduplicated(onlinePacks.map(p => ({ value: p.power, entityId: p.powerEntityId })));
-    const totalRemainingAh = sumDeduplicated(
-        onlinePacks.map(p => ({ value: p.remainingAh, entityId: p.remainingAhEntityId }))
+    // Resolve each online pack's bank-contribution current, power, voltage, SoC, remainingAh, capacityAh
+    // falling back to shared bankFallback when pack-level sensors aren't exposed (e.g. Seplos BLE without pack V/I/SoC).
+    const currentItems = onlinePacks.map(p => {
+        if (p.current !== null) return { packKey: p.key, value: p.current, entityId: p.currentEntityId };
+        if (p.bankFallback?.current !== undefined && p.bankFallback.current !== null) {
+            return { packKey: p.key, value: p.bankFallback.current, entityId: p.bankFallback.currentEntityId };
+        }
+        return { packKey: p.key, value: null, entityId: undefined };
+    });
+
+    const currentRes = sumDeduplicatedWithCoverage(currentItems);
+    const totalCurrent = currentRes.sum;
+
+    // Power deduplication: prevent double-counting when packs share a current sensor or mix measured + derived power.
+    const measuredPowerEntityIds = new Set<string>();
+    const measuredCurrentEntityIds = new Set<string>();
+    for (const p of onlinePacks) {
+        if (p.power !== null && !p.powerDerived) {
+            if (p.powerEntityId) measuredPowerEntityIds.add(p.powerEntityId);
+            if (p.currentEntityId) measuredCurrentEntityIds.add(p.currentEntityId);
+        }
+    }
+
+    const powerItems: Array<{ packKey: string; value: number | null; entityId?: string }> = [];
+    for (const p of onlinePacks) {
+        if (p.power !== null) {
+            if (p.powerDerived && p.currentEntityId && measuredCurrentEntityIds.has(p.currentEntityId)) {
+                // Another pack already contributed measured power for this electrical current source.
+                continue;
+            }
+            const key = p.powerDerived
+                ? p.currentEntityId
+                    ? `cur:${p.currentEntityId}`
+                    : undefined
+                : p.powerEntityId;
+            powerItems.push({ packKey: p.key, value: p.power, entityId: key });
+        } else if (p.bankFallback?.power !== undefined && p.bankFallback.power !== null) {
+            powerItems.push({ packKey: p.key, value: p.bankFallback.power, entityId: p.bankFallback.powerEntityId });
+        } else if (
+            p.bankFallback?.voltage !== undefined &&
+            p.bankFallback.voltage !== null &&
+            p.bankFallback?.current !== undefined &&
+            p.bankFallback.current !== null
+        ) {
+            const curKey = p.bankFallback.currentEntityId ? `cur:${p.bankFallback.currentEntityId}` : undefined;
+            powerItems.push({
+                packKey: p.key,
+                value: p.bankFallback.voltage * p.bankFallback.current,
+                entityId: curKey,
+            });
+        }
+    }
+    const totalPower = sumDeduplicatedWithCoverage(powerItems).sum;
+
+    const remainingRes = sumDeduplicatedWithCoverage(
+        onlinePacks.map(p => ({ packKey: p.key, value: p.remainingAh, entityId: p.remainingAhEntityId }))
     );
-    const totalCapacityAh = sumDeduplicated(
-        onlinePacks.map(p => ({ value: p.capacityAh, entityId: p.capacityAhEntityId }))
+    const capacityRes = sumDeduplicatedWithCoverage(
+        onlinePacks.map(p => ({ packKey: p.key, value: p.capacityAh, entityId: p.capacityAhEntityId }))
     );
+
+    const totalRemainingAh = remainingRes.sum;
+    const totalCapacityAh = capacityRes.sum;
+
+    // True only when both remainingAh and capacityAh cover every online pack (or match cleanly across the same set).
+    const hasFullRemainingCoverage =
+        onlineCount > 0 && setsEqual(remainingRes.coveredPackKeys, allOnlineKeys);
+    const hasFullCapacityCoverage =
+        onlineCount > 0 && setsEqual(capacityRes.coveredPackKeys, allOnlineKeys);
+    const hasFullCurrentCoverage =
+        onlineCount > 0 && setsEqual(currentRes.coveredPackKeys, allOnlineKeys);
 
     // Weighted SoC: Σ(soc_i * cap_i) / Σ cap_i across online packs with valid SoC (deduped by socEntityId).
-    // Falls back to equal weights if any pack lacks valid positive capacity or shares a capacity entity.
+    // Falls back to equal weights if any pack lacks valid positive distinct capacity.
     const socSeen = new Set<string>();
-    const socEntries: PackSnapshot[] = [];
+    const socEntries: Array<{ soc: number; capacityAh: number | null; capacityEntityId?: string }> = [];
     for (const p of onlinePacks) {
-        if (p.soc === null || !Number.isFinite(p.soc)) continue;
-        if (p.socEntityId) {
-            if (socSeen.has(p.socEntityId)) continue;
-            socSeen.add(p.socEntityId);
+        const effectiveSoc = p.soc !== null ? p.soc : (p.bankFallback?.soc ?? null);
+        const effectiveSocId = p.soc !== null ? p.socEntityId : p.bankFallback?.socEntityId;
+        if (effectiveSoc === null || !Number.isFinite(effectiveSoc)) continue;
+        if (effectiveSocId) {
+            if (socSeen.has(effectiveSocId)) continue;
+            socSeen.add(effectiveSocId);
         }
-        socEntries.push(p);
+        socEntries.push({
+            soc: effectiveSoc,
+            capacityAh: p.capacityAh,
+            capacityEntityId: p.capacityAhEntityId,
+        });
     }
 
     let soc: number | null = null;
     if (socEntries.length > 0) {
         const capIds = new Set<string>();
         let allHaveDistinctCap = true;
-        for (const p of socEntries) {
-            if (p.capacityAh === null || p.capacityAh <= 0) {
+        for (const entry of socEntries) {
+            if (entry.capacityAh === null || entry.capacityAh <= 0) {
                 allHaveDistinctCap = false;
                 break;
             }
-            if (p.capacityAhEntityId) {
-                if (capIds.has(p.capacityAhEntityId)) {
+            if (entry.capacityEntityId) {
+                if (capIds.has(entry.capacityEntityId)) {
                     allHaveDistinctCap = false;
                     break;
                 }
-                capIds.add(p.capacityAhEntityId);
+                capIds.add(entry.capacityEntityId);
             }
         }
 
         if (allHaveDistinctCap) {
             let weightedSum = 0;
             let capSum = 0;
-            for (const p of socEntries) {
-                weightedSum += (p.soc as number) * (p.capacityAh as number);
-                capSum += p.capacityAh as number;
+            for (const entry of socEntries) {
+                weightedSum += entry.soc * (entry.capacityAh as number);
+                capSum += entry.capacityAh as number;
             }
             soc = capSum > 0 ? weightedSum / capSum : null;
         } else {
-            const sumSoc = socEntries.reduce((acc, p) => acc + (p.soc as number), 0);
+            const sumSoc = socEntries.reduce((acc, entry) => acc + entry.soc, 0);
             soc = sumSoc / socEntries.length;
         }
     }
 
-    // Bank voltage (mean across online packs with distinct/valid voltage) + inter-pack spread
-    const voltages = onlinePacks
-        .map(p => p.voltage)
-        .filter((v): v is number => v !== null && Number.isFinite(v));
-    const avgVoltage = voltages.length > 0 ? voltages.reduce((a, b) => a + b, 0) / voltages.length : null;
+    // Bank voltage (deduplicated across distinct voltage sources) + inter-pack spread
+    const seenVoltIds = new Set<string>();
+    const distinctVoltages: number[] = [];
+    for (const p of onlinePacks) {
+        const v = p.voltage !== null ? p.voltage : (p.bankFallback?.voltage ?? null);
+        const vId = p.voltage !== null ? p.voltageEntityId : p.bankFallback?.voltageEntityId;
+        if (v === null || !Number.isFinite(v)) continue;
+        if (vId) {
+            if (seenVoltIds.has(vId)) continue;
+            seenVoltIds.add(vId);
+        }
+        distinctVoltages.push(v);
+    }
+    const avgVoltage =
+        distinctVoltages.length > 0
+            ? distinctVoltages.reduce((a, b) => a + b, 0) / distinctVoltages.length
+            : null;
     const voltageSpreadV =
-        voltages.length >= 2 ? Math.max(...voltages) - Math.min(...voltages) : voltages.length === 1 ? 0 : null;
+        distinctVoltages.length >= 2
+            ? Math.max(...distinctVoltages) - Math.min(...distinctVoltages)
+            : null;
 
     // Worst cell delta (normalized to mV)
     let worstDelta: BankWorstDelta | null = null;
@@ -792,7 +1030,18 @@ export const aggregateBankMetrics = (
     }
 
     const balancingPackCount = onlinePacks.filter(p => p.isBalancing).length;
-    const errorCount = packs.filter(p => p.errorMessage !== null).length;
+
+    // Dedupe errorCount by errorEntityId so a shared Seplos problem_code isn't counted N times.
+    const seenErrorIds = new Set<string>();
+    let errorCount = 0;
+    for (const p of packs) {
+        if (p.errorMessage === null) continue;
+        if (p.errorEntityId) {
+            if (seenErrorIds.has(p.errorEntityId)) continue;
+            seenErrorIds.add(p.errorEntityId);
+        }
+        errorCount++;
+    }
     const hasFault = errorCount > 0;
 
     // Bank-scaled current deadband so idle jitter doesn't flip state or flicker ETA
@@ -809,19 +1058,39 @@ export const aggregateBankMetrics = (
         status = 'idle';
     }
 
+    // Only compute kWh when remaining/capacity cover all online packs cleanly
     const remainingKwh =
-        totalRemainingAh !== null && avgVoltage !== null ? (totalRemainingAh * avgVoltage) / 1000 : null;
+        hasFullRemainingCoverage && totalRemainingAh !== null && avgVoltage !== null
+            ? (totalRemainingAh * avgVoltage) / 1000
+            : null;
     const totalKwh =
-        totalCapacityAh !== null && avgVoltage !== null ? (totalCapacityAh * avgVoltage) / 1000 : null;
+        hasFullCapacityCoverage && totalCapacityAh !== null && avgVoltage !== null
+            ? (totalCapacityAh * avgVoltage) / 1000
+            : null;
 
+    // Require matching full coverage across online packs before reporting ETA
     let etaHours: number | null = null;
-    if (status === 'charging' && totalCurrent !== null && totalCapacityAh !== null && totalRemainingAh !== null) {
+    if (
+        status === 'charging' &&
+        hasFullCurrentCoverage &&
+        hasFullRemainingCoverage &&
+        hasFullCapacityCoverage &&
+        totalCurrent !== null &&
+        totalCapacityAh !== null &&
+        totalRemainingAh !== null
+    ) {
         const headroomAh = Math.max(totalCapacityAh - totalRemainingAh, 0);
         const h = headroomAh / totalCurrent;
         if (Number.isFinite(h) && h > 0 && h <= 999) {
             etaHours = h;
         }
-    } else if (status === 'discharging' && totalCurrent !== null && totalRemainingAh !== null) {
+    } else if (
+        status === 'discharging' &&
+        hasFullCurrentCoverage &&
+        hasFullRemainingCoverage &&
+        totalCurrent !== null &&
+        totalRemainingAh !== null
+    ) {
         const h = Math.max(totalRemainingAh, 0) / Math.abs(totalCurrent);
         if (Number.isFinite(h) && h > 0 && h <= 999) {
             etaHours = h;
@@ -840,6 +1109,7 @@ export const aggregateBankMetrics = (
         totalPower,
         totalRemainingAh,
         totalCapacityAh,
+        hasFullCapacityCoverage: hasFullRemainingCoverage && hasFullCapacityCoverage,
         remainingKwh,
         totalKwh,
         currentDeadbandA,
